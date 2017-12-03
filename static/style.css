@@ -1,0 +1,111 @@
+body { 
+    font-family: Verdana, Arial, sans-serif; 
+    font-size: medium; 
+    margin: 0;
+}
+
+/* Headings, etc. */
+
+h1,h2,h3 { 
+    color: #888; 
+}
+
+h1 { 
+    font-size: 24px; 
+    text-align: center; 
+    margin: 0; 
+}
+
+p { margin: 2px 0; }
+
+
+a:link, a:visited { 
+    color: #444;
+    text-decoration: none; 
+} 
+a:hover { 
+    color: #444;
+    text-decoration: underline; 
+}
+
+
+/* Classes */
+
+.field { 
+    font-family: monospace; 
+    font-size: 14px; 
+    background: #ddd; 
+    border: 1px solid #aaa;
+    padding: 1px;
+}
+
+.tiny { font-size: 8pt; } /* for calendar cells */
+
+.message { color: red; font-weight: bold; }  /* for editing error messages */
+
+.subtotal { 
+    font-weight: bold; 
+    background: #aaa;   /* no effect */
+    border-bottom: 2px solid #888; 
+}
+
+.total { 
+    font-weight: bold; 
+    background-color: #abc; 
+}
+
+/* Buttons */
+
+.button { 
+    color: white; 
+    background: #248; 
+    font-family: sans-serif; 
+    font-size: small; 
+    padding: 2px 4px; 
+    text-decoration: none; 
+    margin-left: 4px;
+    border-radius: 4px;
+}
+a.button:link, a.button:visited { text-decoration: none; color: white; background: #248; } 
+a.button:hover { text-decoration: underline; color: white; background: #888; } 
+
+/* Menu */
+#menu { background: #006; color: white; font-weight: bold; padding: 5px; } 
+#menu a:link { text-decoration: none; color: white; } 
+#menu a:visited { text-decoration: none; color: white; } 
+#menu a:hover { text-decoration: none; color: white; background: #aaa; } 
+
+
+/* Tables */
+
+table {
+  width: 100%;
+  border: 1px solid #ccc;
+  padding: none;
+  border-spacing: 0;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+tr {
+  vertical-align: top;
+}
+
+tr:nth-child(even) { background-color: #fff }
+tr:nth-child(odd) { background-color: #f8f8f8 }
+
+td {
+    border: 1px solid #ccc;
+    padding: 8px;
+}
+
+th {
+    color: black;
+    background-color: #ddd;
+    font-weight: bold;
+    padding: 8px;
+    border: 1px solid #ccc;
+    text-align: left;
+}
+
+
