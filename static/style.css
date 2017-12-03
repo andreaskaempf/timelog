@@ -74,7 +74,7 @@ a:hover {
 .button { 
     color: white; 
     background: #248; 
-    font-family: sans-serif; 
+    /*font-family: sans-serif; */
     font-size: small; 
     padding: 2px 4px; 
     text-decoration: none; 

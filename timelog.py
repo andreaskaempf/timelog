@@ -3,7 +3,7 @@
 import os, io
 from sqlite3 import dbapi2 as sql
 from datetime import date, datetime
-from bottle import route, run, template, static_file
+from bottle import route, post, run, request, static_file, redirect
 
 # Hello world example
 @route('/hello/<name>')
@@ -14,6 +14,11 @@ def hello(name):
 @route('/static/<filename:path>')
 def serve_static(filename):
     return static_file(filename, root = os.getcwd() + '/static')
+
+
+#--------------------------------------------------------------------#
+#                            SHOW LOG                                #
+#--------------------------------------------------------------------#
 
 
 # Show time log, most recent at the top
@@ -93,12 +98,12 @@ def log():
             mBillable += hrs
             totalBillable += hrs
 
-        # Show row for this timelog entry
+        # Show row for this timelog entry, with link to edit
         s.write('  <tr>\n')
-        s.write('    <td><a href="project.py?id=%s">%s</a></td>\n' % (pid, project))
-        s.write('    <td align="right"><a href="editlog.py?id=%s">%.1f</a></td>\n' % (wid, hrs))
+        s.write('    <td><a href="/project/%d">%s</a></td>\n' % (pid, project))
+        s.write('    <td align="right"><a href="edit/%s">%.2f</a></td>\n' % (wid, hrs))
         if billable:
-            s.write('    <td align="right">%.1f</td>\n' % hrs)
+            s.write('    <td align="right">%.2f</td>\n' % hrs)
         else:
             s.write('    <td>&nbsp;</td>\n')
         s.write('<td>%s</td>' % descr)
@@ -124,11 +129,148 @@ def summaryRow(s, cls, title, hours, billable):
         rid = ''
     s.write('  <tr class="%s" %s>\n' % (cls, rid))
     s.write('    <td>%s</td>\n' % title)
-    s.write('    <td align="right">%.1f</td>\n' % hours)
-    s.write('    <td align="right">%.1f</td>\n' % billable)
+    s.write('    <td align="right">%.2f</td>\n' % hours)
+    s.write('    <td align="right">%.2f</td>\n' % billable)
     billPcnt = billable / hours * 100.0 if hours > 0.0 else 0.0
     s.write('    <td>%.1f%% productive</td>\n' % billPcnt)
     s.write('  </tr>\n')
+
+
+#--------------------------------------------------------------------#
+#                            EDIT LOG                                #
+#--------------------------------------------------------------------#
+
+
+# Edit/create a log entry
+@route('/edit/<lid:int>')
+def edit_log(lid = 0):
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Start page
+    s = io.StringIO()
+    header(s)
+
+    # Initialize fields
+    if lid:
+        s.write('<h1>Edit Log Entry</h1>\n')
+        cur.execute('select * from work where id = %s' % lid)
+        w = cur.fetchone()
+        lid, project, wdate, hours, billable, description = w 
+        d = parseDate(wdate)
+    else:
+        s.write('<h1>New Log Entry</h1>\n')
+        project = wdate = description = ''
+        hours = 1.0
+        billable = 0
+        d = today()
+    ds = '%d-%02d-%02d' % (d.year, d.month, d.day)
+
+    # Start form
+    s.write('<form method="post" action="/save">\n')
+    s.write('<input type="hidden" name="lid" value="%s" />\n' % lid)
+    s.write('<table width="100%">\n')
+
+    # Date
+    tr(s, ['Date:\n', '<input type="text" name="date" value="%s" class="field">\n' % ds])
+
+    # Drop-down list with active projects
+    s.write('<tr>\n')
+    td(s, 'Project')
+    s.write('<td>\n')
+    s.write('<select name="project" class="field" style="font-family: monospace">\n')
+    cur.execute('select * from project where active order by client, name')
+    for p in cur.fetchall():
+        selected = 'selected' if p[0] == project else ''
+        s.write('<option %s value="%s">%s - %s</option>\n' % (selected, p[0], p[1], p[2]))
+    s.write('</select>\n')
+    s.write('</td>\n')
+    s.write('</tr>\n')
+
+    # Hours
+    tr(s, ['Hours:', '<input type="text" name="hours" value="%.2f" class="field" style="font-family: monospace">\n' % hours])
+
+    # Billable
+    checked = 'checked="y"' if billable else ''
+    tr(s, ['Billable:', '<input type="checkbox" name="billable" %s />' % checked])
+
+    # Description
+    tr(s, ['Description:', '<textarea name="description" class="field" style="width: 600px; height: 80px; font-family: monospace">%s</textarea>' % description])
+
+    # Buttons
+    s.write('<tr>\n <td>&nbsp;</td>\n <td>')
+    s.write('<input type="submit" class="button" style="color: white; background-color: #0c0;" value="Save" />')
+    if id:
+        s.write(' <input type="submit" name="delete" class="button" value="Delete" style="color: white; background-color: #c00;"> ')
+    s.write('</td></tr>\n')
+
+    # End of form
+    s.write('</table>\n')
+    s.write('</form>\n')
+
+    # Finish page
+    footer(s)
+    return s.getvalue()
+
+
+# Save new or changed log entry, assumes everything is valid
+@post('/save')
+def save_log(lid = 0):
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Get the form fields
+    lid = int(request.forms.lid)
+    pid = int(request.forms.project)
+    wdate = parseDate(request.forms.date)
+    hours = float(request.forms.hours)
+    billable = 1 if 'billable' in request.forms else 0
+    descr = request.forms.description
+    descr = descr.replace("'", "\\'")   # TODO: encoding?
+
+    # TODO: validate
+
+    # Save form
+    if id:
+        q = "update work set project_id = %d, work_date = '%s', hours = %.2f, "
+        q += "billable = %d, description = '%s' where id = %d"
+        q = q % (pid, wdate, hours, billable, descr, lid)
+    else:
+        wid = nextId('work', cur)
+        q = "insert into work values (%d, '%s', '%s', %f , '%s', '%s')" 
+        q = q % (wid, pid, wdate, hours, billable, descr)
+    print('---')
+    print(q)
+    print('---')
+    #cur.execute(q)
+    #db.commit()
+    #return('<p>Changes saved, <a href="/">continue</a></p>')
+    redirect('/')
+
+
+# Delete log entry, ask confirmation first
+#if field('delete'):
+#    confirm = field('confirm') 
+#    if confirm == 'yes':
+#        cur.execute('delete from work where id = %s' % id)
+#        db.commit()
+#        print '<p>Log entry %s deleted, <a href="log.py">continue</a></p>' % id
+#    elif confirm:
+#        print '<p>Log entry retained, <a href="log.py">continue</a></p>'
+#    else:
+#        print '<p>Are you sure? <a href="editlog.py?delete=1&id=%d&confirm=yes">yes</a> ' % id
+#        print '/ <a href="editlog.py?delete=1&id=%d&confirm=no">no</a></p>' % id
+#    footer()
+
+
+
+#--------------------------------------------------------------------#
+#                         SUPPORT FUNCTIONS                          #
+#--------------------------------------------------------------------#
 
 # Common functions, formerly in common.py
 
@@ -158,7 +300,7 @@ def nextId(table, cur):
 def header(s):
 
     # Static page header
-    s.write('Content-Type: text/html\n\n')
+    #s.write('Content-Type: text/html\n\n')
     s.write(open('static/header.html').read())
 
     # Show menu
@@ -173,6 +315,14 @@ def header(s):
 # Finish page
 def footer(s):
     s.write('</body>\n</html>\n')
+
+
+# Print a table row
+def tr(s, cells):
+    s.write('<tr style="vertical-align: top">\n')
+    for c in cells:
+        td(s, c)
+    s.write('</tr>\n')
 
 # Print table cell
 def td(s, c):
@@ -191,6 +341,7 @@ def parseDate(s):
 # Format date as "Mon 23/04/2015" 
 dnames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+# Format a date as "Tue 21/02/2016"
 def formatDate(dt):
     if dt:
         dow = dnames[dt.weekday()]
@@ -202,15 +353,10 @@ def formatDate(dt):
 def today():
     return datetime.now().date()
 
-# Determine whether page is POST, i.e., has form arguments
-def isPost():
-    return os.environ['REQUEST_METHOD'] == 'POST'
 
-# Determine a value looks like boolean TRUE
-def isTrue(v):
-    return str(v).lower() in ['1', '1.0', 'true', 'yes']
-
-# End of common.py
+#--------------------------------------------------------------------#
+#                            START SERVER                            #
+#--------------------------------------------------------------------#
 
 # Start server
 run(host = 'localhost', port = 8080)
