@@ -43,15 +43,30 @@ a:hover {
 
 .message { color: red; font-weight: bold; }  /* for editing error messages */
 
-.subtotal { 
+.dtotal { 
     font-weight: bold; 
     background: #aaa;   /* no effect */
+    border-bottom: 1px solid #888; 
+}
+
+.wtotal { 
+    font-weight: bold; 
+    color: #aa0;
+    background: #ffa;   /* no effect */
+    border-bottom: 1px solid #888; 
+}
+
+.mtotal { 
+    font-weight: bold; 
+    color: #a00;
+    background: #faa;   /* no effect */
     border-bottom: 2px solid #888; 
 }
 
 .total { 
     font-weight: bold; 
-    background-color: #abc; 
+    color: #005;
+    background-color: #aaf; 
 }
 
 /* Buttons */

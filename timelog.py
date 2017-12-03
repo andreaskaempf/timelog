@@ -17,7 +17,7 @@ def serve_static(filename):
 
 
 # Show time log, most recent at the top
-@route('/log')
+@route('/')
 def log():
 
     # Connect to database
@@ -36,14 +36,22 @@ def log():
         s.write('    <th>%s</th>\n' % h)
     s.write('  </tr>\n')
 
-    # Initialize counters, etc.
+    # Initialize counters, etc.  
     lastDate = None
-    dateHrs = dateBillable = totalHrs = totalBillable = 0
+    dHrs = dBillable = 0.0
+    wHrs = wBillable = 0.0
+    mHrs = mBillable = 0.0
+    totalHrs = totalBillable = 0
 
-    # Get all time log records
+    # TODO: don't hard-code date, and use previous year if before March
+    this_year = 2017
+
+    # Get the time log records for the current year
+    # PROBLEM: the counters will be out or missed, if there are gaps in the dates
     q = 'select work.id, project_id, client, name, work_date, hours, work.billable, work.description '
     q += ' from work, project where work.project_id = project.id'
-    q += ' order by work_date desc limit 400'
+    q += " and substr(work_date,1,4) >= '%d'" % this_year
+    q += ' order by work_date'  # desc limit 400'
     cur.execute(q)
     work = cur.fetchall()
 
@@ -55,26 +63,37 @@ def log():
         project = '%s - %s' % (client, projName)
         wdate = parseDate(wdate)
 
-        # New header if date changes
+        # If date has changed, show summary for the date, and the week if has changed,
+        # and end of month
         if lastDate and lastDate != wdate:
-            s.write('  <tr class="subtotal">\n')
-            s.write('    <td>%s:</td>\n' % formatDate(lastDate))
-            s.write('    <td align="right">%.1f</td>\n' % dateHrs)
-            s.write('    <td align="right">%.1f</td>\n' % dateBillable)
-            billPcnt = dateBillable / dateHrs * 100.0 if dateHrs > 0.0 else 0.0
-            s.write('    <td>%.1f%% productive</td>\n' % billPcnt)
-            s.write('  </tr>\n')
-            dateHrs = dateBillable = data = 0
+
+            # Summary for this date
+            summaryRow(s, 'dtotal', formatDate(lastDate), dHrs, dBillable)
+            dHrs = dBillable = data = 0.0
+
+            # If just finished a Friday, show summary for the date
+            if lastDate.weekday() == 4:   # 0 = Monday
+                summaryRow(s, 'wtotal', 'Week subtotal:', wHrs, wBillable)
+                wHrs = wBillable = 0.0
+
+            # If will be starting a new month, show summary for the date
+            if lastDate.month != wdate.month:
+                summaryRow(s, 'mtotal', 'Month subtotal', mHrs, mBillable)
+                mHrs = mBillable = 0.0
 
         # Update counters
         lastDate = wdate
-        dateHrs += hrs
-        if billable:
-            dateBillable += hrs
-            totalBillable += hrs
+        dHrs += hrs
+        wHrs += hrs
+        mHrs += hrs
         totalHrs += hrs
+        if billable:
+            dBillable += hrs
+            wBillable += hrs
+            mBillable += hrs
+            totalBillable += hrs
 
-        # Show one row
+        # Show row for this timelog entry
         s.write('  <tr>\n')
         s.write('    <td><a href="project.py?id=%s">%s</a></td>\n' % (pid, project))
         s.write('    <td align="right"><a href="editlog.py?id=%s">%.1f</a></td>\n' % (wid, hrs))
@@ -85,21 +104,11 @@ def log():
         s.write('<td>%s</td>' % descr)
         s.write('  </tr>\n')
 
-    # Final subtotal
-    s.write('  <tr class="subtotal">\n')
-    s.write('    <td>%s:</td>\n' % formatDate(lastDate))
-    s.write('    <td align="right">%.1f</td>\n' % dateHrs)
-    s.write('    <td align="right">%.1f</td>\n' % dateBillable)
-    s.write('    <td>&nbsp;</td>\n')
-    s.write('  </tr>\n')
-
-    # Final total, finish table
-    s.write('  <tr class="total">\n')
-    s.write('    <td>Total:</td>\n')
-    s.write('    <td align="right">%.1f</td>\n' % totalHrs)
-    s.write('    <td align="right">%.1f</td>\n' % totalBillable)
-    s.write('    <td>&nbsp;</td>\n')
-    s.write('  </tr>\n')
+    # Final subtotals, by day, week, month, and grand total
+    summaryRow(s, 'dtotal', formatDate(lastDate), dHrs, dBillable)
+    summaryRow(s, 'wtotal', 'Week subtotal:', wHrs, wBillable)
+    summaryRow(s, 'mtotal', 'Month subtotal', dHrs, dBillable)
+    summaryRow(s, 'total', 'Total', totalHrs, totalBillable)
     s.write('</table>\n')
 
     # Finish page
@@ -107,6 +116,19 @@ def log():
     return s.getvalue()
 
 
+# Print a summary row, every time the date, week, or month changes, and at the end
+def summaryRow(s, cls, title, hours, billable):
+    if cls == 'total':
+        rid = 'href="#totals"'
+    else:
+        rid = ''
+    s.write('  <tr class="%s" %s>\n' % (cls, rid))
+    s.write('    <td>%s</td>\n' % title)
+    s.write('    <td align="right">%.1f</td>\n' % hours)
+    s.write('    <td align="right">%.1f</td>\n' % billable)
+    billPcnt = billable / hours * 100.0 if hours > 0.0 else 0.0
+    s.write('    <td>%.1f%% productive</td>\n' % billPcnt)
+    s.write('  </tr>\n')
 
 # Common functions, formerly in common.py
 
@@ -170,8 +192,11 @@ def parseDate(s):
 dnames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 def formatDate(dt):
-    dow = dnames[dt.weekday()]
-    return '%s %02d/%02d/%d' % (dow, dt.day, dt.month, dt.year)
+    if dt:
+        dow = dnames[dt.weekday()]
+        return '%s %02d/%02d/%d' % (dow, dt.day, dt.month, dt.year)
+    else:
+        return '(no date)'
 
 # Today's date
 def today():
