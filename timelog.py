@@ -1,10 +1,16 @@
 #!/bin/python3
 
-import os, io
+import os, io, uuid
 from sqlite3 import dbapi2 as sql
 from datetime import date, datetime
 from bottle import route, post, run, request, static_file, redirect
 
+
+# Where sessions go
+session_dir = '/tmp/sessions'
+if not os.path.exists(session_dir):
+    print('Creating session directory:', session_dir)
+    os.mkdir(session_dir)
 
 #--------------------------------------------------------------------#
 #                            SHOW LOG                                #
@@ -434,6 +440,47 @@ def formatDate(dt):
 # Today's date
 def today():
     return datetime.now().date()
+
+
+
+#--------------------------------------------------------------------#
+#                         SESSION HANDLER                            #
+#--------------------------------------------------------------------#
+
+
+# Simple session handling. Session ID is stored in a cookie, and
+# the session data is stored in a JSON file with that name in /tmp
+def get_session():
+
+    # Get the current session ID from cookie, create if not there
+    sid = request.cookies.get('sid')
+    if not sid:
+        sid = uuid.uuid4().hex
+        response.set_cookie('sid', sid)
+
+    # Get the session file and return as a dictionary; if no session
+    # file yet, just return an empty dictionary
+    sfile = session_dir + '/' + sid
+    if os.path.exists(sfile):
+        return json.loads(readFile(sfile))
+    else:
+        return { 'sid' : sid }
+
+
+# Save the session, creates a new session ID if current one is not found
+def save_session(sdata):
+    sid = sdata['sid']
+    f = open(session_dir + '/' + sid, 'w')
+    f.write(json.dumps(sdata))
+    f.close()
+
+
+# Save the session ID in the next cookie (NOT USED)
+def remember_session():
+    sess = get_session()
+    if sess: 
+        response.set_cookie('sid', sess['sid'])
+
 
 
 #--------------------------------------------------------------------#
