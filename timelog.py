@@ -5,16 +5,6 @@ from sqlite3 import dbapi2 as sql
 from datetime import date, datetime
 from bottle import route, post, run, request, static_file, redirect
 
-# Hello world example
-@route('/hello/<name>')
-def hello(name):
-    return template('<b>Hello {{name}}</b>!', name = name)
-
-# Serve static files
-@route('/static/<filename:path>')
-def serve_static(filename):
-    return static_file(filename, root = os.getcwd() + '/static')
-
 
 #--------------------------------------------------------------------#
 #                            SHOW LOG                                #
@@ -267,6 +257,98 @@ def save_log(lid = 0):
 #    footer()
 
 
+#--------------------------------------------------------------------#
+#                             PROJECTS                               #
+#--------------------------------------------------------------------#
+
+
+# Default is to show just active projects, if no state specified
+@route('/projects')
+def projects1():
+    return projects('active')
+
+
+# Show list of projects: all, active, ...
+@route('/projects/<show>')
+def projects(show):
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Get hours per project into a dictionary
+    project_hours = {}  # keyed by project id
+    cur.execute('select project_id, sum(hours) from work group by project_id')
+    for r in cur.fetchall():
+        p, h = r
+        project_hours[p] = float(h)
+
+    # Start page
+    s = io.StringIO()
+    header(s)
+    s.write('<h1>Project</h1>\n')
+    s.write('<p><a href="/edit_project" class="button">Add project</a> | Show: ')
+    for x in ['active', 'inactive', 'all']:
+        if x == show:
+            s.write('<b>%s</b> ' % x)
+        else:
+            s.write('<a href="/projects/%s">%s</a> ' % (x, x))
+    s.write('</p>\n')
+
+    # Start table
+    s.write('<table width="100%" border="1">\n')
+    s.write('  <tr class="heading">\n')
+    for h in ['Client', 'Name', 'Description', 'Billable', 'Active', 'Total hours', 'Fees', 'Effective rate']:
+        s.write('    <th>%s</th>\n' % h)
+    s.write('  </tr>\n')
+
+    # Get projects and show in table
+    count = 0
+    cur.execute('select id, client, name, description, billable, active, fees from project order by client, name')
+    for p in cur.fetchall():
+
+        pid, client, name, descr, billable, active, fees = p
+
+        hours = project_hours.get(pid, 0.0)
+        if (active and show == 'inactive') or (not active and show == 'active'):
+            continue
+        count += 1
+
+        if active:
+            s.write('<tr>\n')
+        else:
+            s.write('<tr style="color: #888; background: #ccc;">\n')
+
+        td(s, client)
+        td(s, '<a href="/project/%s">%s</a>' % (pid, name))
+        td(s, descr)
+        if billable:
+            s.write('<td style="background: green">Yes</td>\n')
+        else:
+            td(s, 'No')
+
+        td(s, 'Yes' if active else 'No')
+
+        s.write('<td align="right">%.1f</td>\n' % hours)
+        if fees:
+            fees = float(fees)
+            s.write('<td align="right">%.2f</td>\n' % fees)
+        else:
+            s.write('<td align="right" style="color: #ccc;">n/a</td>\n')
+
+        if hours and fees and hours > 0 and fees > 0:
+            rate = fees / (hours / 10.0)
+            s.write('<td align="right">%.2f</td>\n' % rate)
+        else:
+            s.write('<td align="right" style="color: #ccc;">n/a</td>\n')
+        s.write('</tr>\n')
+
+    # Finish table and page
+    s.write('</table>\n')
+    s.write('<p>%d projects</p>\n' % count)
+    footer(s)
+    return(s.getvalue())
+
 
 #--------------------------------------------------------------------#
 #                         SUPPORT FUNCTIONS                          #
@@ -276,11 +358,11 @@ def save_log(lid = 0):
 
 # Menu options
 menu = [
-    ['History', 'log.py'],
-    ['New log', 'editlog.py'],
-    ['Calendar', 'calendar.py'],
-    ['Projects', 'projects.py'], #['Contacts', 'contacts.py'],
-    ['Graphs', 'graphs.py']]
+    ['History', '/'],
+    ['New log', 'edit'],
+    ['Calendar', 'calendar'],
+    ['Projects', 'projects'], #['Contacts', 'contacts.py'],
+    ['Graphs', 'graphs']]
 
 
 # Get database handler, new version using SQLite
@@ -357,6 +439,18 @@ def today():
 #--------------------------------------------------------------------#
 #                            START SERVER                            #
 #--------------------------------------------------------------------#
+
+
+# Hello world example
+@route('/hello/<name>')
+def hello(name):
+    return template('<b>Hello {{name}}</b>!', name = name)
+
+# Serve static files
+@route('/static/<filename:path>')
+def serve_static(filename):
+    return static_file(filename, root = os.getcwd() + '/static')
+
 
 # Start server
 run(host = 'localhost', port = 8080)
