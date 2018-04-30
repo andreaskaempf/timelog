@@ -12,6 +12,7 @@ if not os.path.exists(session_dir):
     print('Creating session directory:', session_dir)
     os.mkdir(session_dir)
 
+
 #--------------------------------------------------------------------#
 #                            SHOW LOG                                #
 #--------------------------------------------------------------------#
@@ -97,7 +98,7 @@ def log():
         # Show row for this timelog entry, with link to edit
         s.write('  <tr>\n')
         s.write('    <td><a href="/project/%d">%s</a></td>\n' % (pid, project))
-        s.write('    <td align="right"><a href="edit/%s">%.2f</a></td>\n' % (wid, hrs))
+        s.write('    <td align="right"><a href="edit_log/%s">%.2f</a></td>\n' % (wid, hrs))
         if billable:
             s.write('    <td align="right">%.2f</td>\n' % hrs)
         else:
@@ -133,13 +134,19 @@ def summaryRow(s, cls, title, hours, billable):
 
 
 #--------------------------------------------------------------------#
-#                            EDIT LOG                                #
+#                         EDIT LOG ENTRY                             #
 #--------------------------------------------------------------------#
 
 
+# Editing a log entry with no idea: create new log entry (id 0)
+@route('/new_log')
+def new_log():
+    redirect('/edit_log/0')
+
+
 # Edit/create a log entry
-@route('/edit/<lid:int>')
-def edit_log(lid = 0):
+@route('/edit_log/<lid:int>')
+def edit_log(lid):
 
     # Connect to database
     db = getDB()
@@ -356,16 +363,120 @@ def projects(show):
     return(s.getvalue())
 
 
+# Edit/create project
+@route('/edit_project/<pid:int>')
+def edit_project(pid):
+
+    # Start page
+    s = io.StringIO()
+    header(s)
+    s.write('<h1>Edit Project</h1>\n')
+
+    #for e in errs:  # show error messages
+    #    print '<p class="message">%s</p>' % e
+
+    s.write('<form method="post" action="/save_project"\n>')
+    s.write('<input type="hidden" name="id" value="%d" />' % id)
+    s.write('<table width="100%">\n')
+
+    # Get existing values if editing a project
+    if isPost():
+        pass  # already have values from validation
+    elif id > 0:
+        cur.execute('select client, name, description, billable, active, complete, fees from project where id = %d' % id)
+        client, name, description, billable, active, complete, fees = cur.fetchone()
+        complete = float(complete) if complete else 0.0
+        fees = float(fees) if fees else 0.0
+        billable = isTrue(billable)
+        active = isTrue(active)
+    else:
+        client = name = description = ''
+        billable = active = True 
+        complete = fees = 0.0
+
+    tr(s, 'Client:', '<input type="text" name="client" value="%s">' % client)
+    tr(s, 'Project name:', '<input type="text" name="name" value="%s">' % name)
+    tr(s, 'Description:', '<textarea name="description" cols=80 rows=8>%s</textarea>' % description)
+    checked = 'checked="y"' if billable else ''
+    tr(s, 'Billable:' '<input type="checkbox" name="billable" %s>' % checked)
+    checked = 'checked="y"' if active else ''
+    tr(s, 'Active:', '<input type="checkbox" name="active" %s>' % checked)
+    tr(s, 'Percent complete:', '<input type="text" name="complete" value="%.1f">' % complete)
+    tr(s, 'Fees GBP:', '<input type="text" name="fees" value="%.2f">' % fees)
+
+    # End of table and form and page
+    s.write('</table>')
+    s.write('<input type="submit" value="Save" class="button">')
+    s.write('</form>')
+    footer(s)
+
+
+# Save project from editing form
+@route('/save_project')
+def save_project():
+
+    
+    # Get fields
+    pid = int(form['id'].value)
+    client = form['client'].value.strip()
+    name = form['name'].value.replace("'", "\\'").strip()
+    description = form['description'].value.replace("'", "\\'").strip()
+    billable = 1 if form.has_key('billable') else 0
+    active = 1 if form.has_key('active') else 0
+    complete = form['complete'].value
+    fees = form['fees'].value
+
+    # Check for errors
+    errs = []
+    if not client:
+        errs.append('Please enter a client name')
+    if not name:
+        errs.append('Please enter a project name')
+    if complete:
+        try:
+            complete = float(complete)
+            if complete < 0 or complete > 100:
+                errs.append('Percent complete must be 0 to 100')
+        except:
+            errs.append('Percent complete must be a number')
+            complete = 0
+    else:
+        complete = 0
+    if fees:
+        try:
+            fees = float(fees)
+            if fees < 0:
+                errs.append('Fees cannot be negative')
+        except:
+            fees = 0
+            errs.append('Fees must be a number')
+    else:
+        fees = 0
+
+    # Save in database, either new or update existing
+    if not errs:
+        if id:
+            q = "update project set client = '%s', name = '%s', description = '%s' , billable = %d , active = %d, complete = %.1f, fees = %.2f where id = %s" % (client, name, description, billable, active, complete, fees, id)
+        else:
+            id = nextId('project', cur)
+            q = "insert into project values (%d, '%s', '%s', '%s' , %d , %d, %.1f, %.2f)" % \
+                    (id, client, name, description, billable, active, complete, fees)
+        cur.execute(q)
+        db.commit()
+        print('<p>Changes saved, click <a href="project.py?id=%d">here</a> to continue</p>' % id)
+        footer()
+        exit()
+
+
 #--------------------------------------------------------------------#
 #                         SUPPORT FUNCTIONS                          #
 #--------------------------------------------------------------------#
 
-# Common functions, formerly in common.py
 
 # Menu options
 menu = [
     ['History', '/'],
-    ['New log', 'edit'],
+    ['New log', 'new_log'],
     ['Calendar', 'calendar'],
     ['Projects', 'projects'], #['Contacts', 'contacts.py'],
     ['Graphs', 'graphs']]
@@ -411,6 +522,7 @@ def tr(s, cells):
     for c in cells:
         td(s, c)
     s.write('</tr>\n')
+
 
 # Print table cell
 def td(s, c):
@@ -488,11 +600,6 @@ def remember_session():
 #--------------------------------------------------------------------#
 
 
-# Hello world example
-@route('/hello/<name>')
-def hello(name):
-    return template('<b>Hello {{name}}</b>!', name = name)
-
 # Serve static files
 @route('/static/<filename:path>')
 def serve_static(filename):
@@ -500,5 +607,5 @@ def serve_static(filename):
 
 
 # Start server
-run(host = 'localhost', port = 8080)
+run(host = 'localhost', port = 8080, reloader = True, debug = True)
 
