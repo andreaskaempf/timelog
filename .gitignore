@@ -2,3 +2,4 @@ __pycache__
 timelog.db
 *.pyc
 old
+timelog.db.old
