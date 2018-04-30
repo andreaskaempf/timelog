@@ -292,7 +292,7 @@ def projects(show):
     s = io.StringIO()
     header(s)
     s.write('<h1>Project</h1>\n')
-    s.write('<p><a href="/edit_project" class="button">Add project</a> | Show: ')
+    s.write('<p><a href="/edit_project/0" class="button">Add project</a> | Show: ')
     for x in ['active', 'inactive', 'all']:
         if x == show:
             s.write('<b>%s</b> ' % x)
@@ -355,7 +355,134 @@ def projects(show):
     return(s.getvalue())
 
 
-# Edit/create project
+# Show info for one project
+@route('/project/<pid:int>')
+def project(pid):
+
+    # Start page
+    s = io.StringIO()
+    header(s)
+    s.write('<h1>Project</h1>\n')
+
+    # Get the project to show, exit if not found
+    db = getDB()
+    cur = db.cursor()
+    cur.execute('select id, client, name, description, billable, active, complete, fees from project where id = %d' % pid)
+    p = cur.fetchone()
+    if not p:
+        s.write('<p>Project id %d not found</p>' % pid)
+        footer(s)
+        return s.getvalue()
+
+    # Show project summary info
+    pid, client, name, description, billable, active, complete, fees = p 
+    s.write('<table width="100%" border="1">\n')
+    tr(s, ['Client:', client])
+    tr(s, ['Project Name:', name])
+    tr(s, ['Description:', description])
+    tr(s, ['Billable:', billable])
+    tr(s, ['Active:', active])
+    tr(s, ['% complete:', complete])
+    tr(s, ['Fees:', fees])
+    s.write('</table>\n')
+
+    # Buttons to edit project
+    s.write('<p><a href="/edit_project/%d" class="button">Edit</a></p>\n<hr/>\n' % pid)
+
+    # Start table
+    s.write('<table width="100%" border="1">\n')
+
+    # Display log entries for this project
+    totHrs = totBHrs = totRecs = 0
+    totMthHrs = {}
+    totMthBHrs = {}
+    prevMonth = -1
+    cur.execute('select * from work where project_id = %d order by work_date' % pid)
+    ww = cur.fetchall()
+    for w in ww:
+
+        wid, pid, wdate, hours, billable, descr = w
+        wdate = parseDate(wdate)
+        hrs = float(hours)
+
+        # Heading at beginning of each month
+        if wdate.month != prevMonth:
+            s.write('<tr class="heading">')
+            s.write('<td width=150>Date</td>')
+            td(s, 'Hours')
+            td(s, 'Billable')
+            td(s, 'Description')
+            s.write('</tr>')
+            prevMonth = wdate.month
+
+        # Totals
+        mth = '%d-%02d' % (wdate.year, wdate.month)
+        if not mth in totMthHrs:
+            totMthHrs[mth] = totMthBHrs[mth] = 0
+        totMthHrs[mth] += hrs
+        totHrs += hrs
+        if billable:
+            totBHrs += hrs
+            totMthBHrs[mth] += hrs
+
+        # Show row
+        s.write('<tr class="data">')
+        td(s, '<a href="/edit_log/%d">%s</a>' % (wid, formatDate(wdate)))
+        s.write('<td align="right">%.1f</td>' % hrs)
+        if billable:
+            s.write('<td style="text-align: center; background: #5f5">Yes</td>')
+        else:
+            s.write('<td style="text-align: center; color: #aaa">No</td>')
+        td(s, descr)
+        s.write('</tr>')
+
+    # Totals row
+    s.write('<tr class="total"><td>Total</td><td align="right">%.1f</td><td>&nbsp;</td><td>%.1f days</td></tr>' % (totHrs, totHrs / 8.0))
+    if totBHrs:
+        pcntB = totBHrs / totHrs * 100.0
+        s.write('<tr class="total"><td>Billable</td><td align="right">%.1f</td><td align="right">%.1f%%</td><td>%.1f days</td></tr>' % (totBHrs, pcntB, totBHrs / 8.0))
+    s.write('</table>')
+
+    # Display stats by month
+    s.write('<br /><table border="1">')
+    s.write('<tr>')
+    for h in ['Month', 'Billable', 'Non-billable', 'Total']:
+        s.write('<th>%s</th>' % h)
+    s.write('</tr>')
+    mths = totMthHrs.keys()
+    mths = sorted(mths)
+    for m in mths:
+        th = totMthHrs[m]
+        bh = totMthBHrs[m]
+        nbh = th - bh
+        s.write('<tr>')
+        s.write('<td>%s</td>' % m)
+        s.write('<td align="right">%.1f hrs = %.1f days</td>' % (bh, bh / 8.0))
+        s.write('<td align="right">%.1f hrs = %.1f days</td>' % (nbh, nbh / 8.0))
+        s.write('<td align="right">%.1f hrs = %.1f days</td>' % (th, th / 8.0))
+        s.write('</tr>')
+    s.write('</table>')
+
+    # Display effective hourly rate
+    if totHrs > 0 and fees > 0:
+        days = totHrs / 8.0
+        rate = fees / days
+        s.write('<br /><p>Effective daily rate based on total hrs so far (%.1f days @ 8 hrs/day) = %.2f</p>' % (days, rate))
+        bdays = totBHrs / 8.0
+        brate = fees / bdays
+        s.write('<p>Billable time only (%.1f days @ 8 hrs/day) = %.2f</p>' % (bdays, brate))
+        if complete > 0 and fees > 0:
+            rate = fees / (days / (complete / 100.0))
+            brate = fees / (bdays / (complete / 100.0))
+            s.write('<p>Effective daily rate based on %.1f%% complete = %.2f</p>' % (complete, rate))
+            s.write('<p>Billable only = %.2f</p>' % brate)
+
+    # Finish page
+    footer(s)
+    return(s.getvalue())
+
+
+# Show form to edit/create a project
 @route('/edit_project/<pid:int>')
 def edit_project(pid):
 
@@ -368,13 +495,11 @@ def edit_project(pid):
     #    print '<p class="message">%s</p>' % e
 
     s.write('<form method="post" action="/save_project"\n>')
-    s.write('<input type="hidden" name="id" value="%d" />' % id)
+    s.write('<input type="hidden" name="id" value="%d" />' % pid)
     s.write('<table width="100%">\n')
 
     # Get existing values if editing a project
-    if isPost():
-        pass  # already have values from validation
-    elif id > 0:
+    if pid > 0:
         cur.execute('select client, name, description, billable, active, complete, fees from project where id = %d' % id)
         client, name, description, billable, active, complete, fees = cur.fetchone()
         complete = float(complete) if complete else 0.0
@@ -386,39 +511,41 @@ def edit_project(pid):
         billable = active = True 
         complete = fees = 0.0
 
-    tr(s, 'Client:', '<input type="text" name="client" value="%s">' % client)
-    tr(s, 'Project name:', '<input type="text" name="name" value="%s">' % name)
-    tr(s, 'Description:', '<textarea name="description" cols=80 rows=8>%s</textarea>' % description)
+    tr(s, ['Client:', '<input type="text" name="client" value="%s">' % client])
+    tr(s, ['Project name:', '<input type="text" name="name" value="%s">' % name])
+    tr(s, ['Description:', '<textarea name="description" cols=80 rows=8>%s</textarea>' % description])
     checked = 'checked="y"' if billable else ''
-    tr(s, 'Billable:' '<input type="checkbox" name="billable" %s>' % checked)
+    tr(s, ['Billable:', '<input type="checkbox" name="billable" %s>' % checked])
     checked = 'checked="y"' if active else ''
-    tr(s, 'Active:', '<input type="checkbox" name="active" %s>' % checked)
-    tr(s, 'Percent complete:', '<input type="text" name="complete" value="%.1f">' % complete)
-    tr(s, 'Fees GBP:', '<input type="text" name="fees" value="%.2f">' % fees)
+    tr(s, ['Active:', '<input type="checkbox" name="active" %s>' % checked])
+    tr(s, ['Percent complete:', '<input type="text" name="complete" value="%.1f">' % complete])
+    tr(s, ['Fees GBP:', '<input type="text" name="fees" value="%.2f">' % fees])
 
     # End of table and form and page
     s.write('</table>')
     s.write('<input type="submit" value="Save" class="button">')
     s.write('</form>')
     footer(s)
+    return s.getvalue()
 
 
 # Save project from editing form
-@route('/save_project')
+@post('/save_project')
 def save_project():
-
     
-    # Get fields
-    pid = int(form['id'].value)
-    client = form['client'].value.strip()
-    name = form['name'].value.replace("'", "\\'").strip()
-    description = form['description'].value.replace("'", "\\'").strip()
-    billable = 1 if form.has_key('billable') else 0
-    active = 1 if form.has_key('active') else 0
-    complete = form['complete'].value
-    fees = form['fees'].value
+    # Get fields from form
+    print(list(request.forms.items()))
+    pid = int(request.forms.id)
+    client = clean(request.forms.client)
+    name = clean(request.forms.name)
+    description = clean(request.forms.description)
+    billable = 1 if 'billable' in request.forms else 0
+    active = 1 if 'active' in request.forms else 0
+    complete = request.forms.complete
+    fees = request.forms.fees
 
     # Check for errors
+    # TODO: NEED TO SHOW THE ERRORS, MAYBE DO VALIDATION IN JAVASCRIPT INSTEAD
     errs = []
     if not client:
         errs.append('Please enter a client name')
@@ -447,17 +574,28 @@ def save_project():
 
     # Save in database, either new or update existing
     if not errs:
-        if id:
-            q = "update project set client = '%s', name = '%s', description = '%s' , billable = %d , active = %d, complete = %.1f, fees = %.2f where id = %s" % (client, name, description, billable, active, complete, fees, id)
+        db = getDB()
+        cur = db.cursor()
+        if pid > 0:
+            q = "update project set client = '%s', name = '%s', description = '%s' , billable = %d , active = %d, complete = %.1f, fees = %.2f where id = %s" % (client, name, description, billable, active, complete, fees, pid)
         else:
-            id = nextId('project', cur)
+            pid = nextId('project', cur)
             q = "insert into project values (%d, '%s', '%s', '%s' , %d , %d, %.1f, %.2f)" % \
-                    (id, client, name, description, billable, active, complete, fees)
+                    (pid, client, name, description, billable, active, complete, fees)
         cur.execute(q)
         db.commit()
-        print('<p>Changes saved, click <a href="project.py?id=%d">here</a> to continue</p>' % id)
-        footer()
-        exit()
+        db.close()
+        redirect('/project/%d' % pid)
+
+    # Show validation errors
+    s = io.StringIO()
+    header(s)
+    s.write('<h1>%d Errors Editing Project</h1>\n<ul>\n' % len(errs))
+    for e in errs:
+        s.write(' <li>%s</li>\n' % e)
+    s.write('</ul>\n<p>Click back button to fix errors.</p>\n')
+    footer(s)
+    return s.getvalue()
 
 
 #--------------------------------------------------------------------#
@@ -467,7 +605,7 @@ def save_project():
 
 # Menu options
 menu = [
-    ['History', '/'],
+    ['History', ''],
     ['New log', 'new_log'],
     ['Calendar', 'calendar'],
     ['Projects', 'projects'], #['Contacts', 'contacts.py'],
@@ -499,7 +637,7 @@ def header(s):
     for m in menu:
         if m != menu[0]:
             s.write(' | ')
-        s.write('<a href="%s">%s</a>\n' % (m[1], m[0]))
+        s.write('<a href="/%s">%s</a>\n' % (m[1], m[0]))
     s.write('</div>\n')
 
 
@@ -545,6 +683,10 @@ def formatDate(dt):
 def today():
     return datetime.now().date()
 
+# Clean a string prior to inserting into SQL statement, i.e., remove leading
+# trailing blanks and apostrophes
+def clean(s):
+    return s.strip().replace("'", "\\'")
 
 
 #--------------------------------------------------------------------#
