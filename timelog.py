@@ -172,7 +172,7 @@ def edit_log(lid):
     ds = '%d-%02d-%02d' % (d.year, d.month, d.day)
 
     # Start form
-    s.write('<form method="post" action="/save">\n')
+    s.write('<form method="post" action="/save_log">\n')
     s.write('<input type="hidden" name="lid" value="%s" />\n' % lid)
     s.write('<table width="100%">\n')
 
@@ -192,14 +192,10 @@ def edit_log(lid):
     s.write('</td>\n')
     s.write('</tr>\n')
 
-    # Hours
+    # Otherfields
     tr(s, ['Hours:', '<input type="text" name="hours" value="%.2f" class="field" style="font-family: monospace">\n' % hours])
-
-    # Billable
     checked = 'checked="y"' if billable else ''
     tr(s, ['Billable:', '<input type="checkbox" name="billable" %s />' % checked])
-
-    # Description
     tr(s, ['Description:', '<textarea name="description" class="field" style="width: 600px; height: 80px; font-family: monospace">%s</textarea>' % description])
 
     # Buttons
@@ -219,8 +215,8 @@ def edit_log(lid):
 
 
 # Save new or changed log entry, assumes everything is valid
-@post('/save')
-def save_log(lid = 0):
+@post('/save_log')
+def save_log():
 
     # Connect to database
     db = getDB()
@@ -237,8 +233,8 @@ def save_log(lid = 0):
 
     # TODO: validate
 
-    # Save form
-    if id:
+    # Save data
+    if lid > 0:
         q = "update work set project_id = %d, work_date = '%s', hours = %.2f, "
         q += "billable = %d, description = '%s' where id = %d"
         q = q % (pid, wdate, hours, billable, descr, lid)
@@ -246,12 +242,8 @@ def save_log(lid = 0):
         wid = nextId('work', cur)
         q = "insert into work values (%d, '%s', '%s', %f , '%s', '%s')" 
         q = q % (wid, pid, wdate, hours, billable, descr)
-    print('---')
-    print(q)
-    print('---')
-    #cur.execute(q)
-    #db.commit()
-    #return('<p>Changes saved, <a href="/">continue</a></p>')
+    cur.execute(q)
+    db.commit()
     redirect('/')
 
 
