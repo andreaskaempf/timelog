@@ -5,8 +5,21 @@ from sqlite3 import dbapi2 as sql
 from datetime import date, datetime
 from bottle import route, post, run, request, static_file, redirect
 
+# Name of SQLite database 
+dbname = 'timelog.db'
 
-# Where sessions go
+# If database does not yet exist, create it
+if not os.path.exists(dbname):
+    print('Database %s not found, creating it' % dbname)
+    db = sql.connect(dbname)
+    cur = db.cursor()
+    for r in open('create_database.sql'):
+        print(r)
+        cur.execute(r)
+    db.commit()
+    db.close()
+
+# Where sessions go (NOT USED YET)
 session_dir = '/tmp/sessions'
 if not os.path.exists(session_dir):
     print('Creating session directory:', session_dir)
@@ -768,14 +781,14 @@ menu = [
 
 # Get database handler, new version using SQLite
 def getDB():
-    return sql.connect('timelog.db')
+    return sql.connect(dbname)
 
 
 # Get next ID for a table
 def nextId(table, cur):
     cur.execute('select max(id) from ' + table)
     r = cur.fetchone()
-    nid = int(r[0])
+    nid = r[0] if r and r[0] else 0
     return nid + 1
 
 
