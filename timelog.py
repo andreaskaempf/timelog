@@ -588,12 +588,155 @@ def save_project():
         redirect('/project/%d' % pid)
 
     # Show validation errors
+    # TODO: show this on the original form, maybe by doing validation with
+    # Javascript
     s = io.StringIO()
     header(s)
     s.write('<h1>%d Errors Editing Project</h1>\n<ul>\n' % len(errs))
     for e in errs:
         s.write(' <li>%s</li>\n' % e)
     s.write('</ul>\n<p>Click back button to fix errors.</p>\n')
+    footer(s)
+    return s.getvalue()
+
+
+#--------------------------------------------------------------------#
+#                           CALENDAR                                 #
+#--------------------------------------------------------------------#
+
+# Save project from editing form
+@route('/calendar')
+def calendar():
+
+
+
+
+    # Connect to database and get cursor
+    db = getDB()
+    cur = db.cursor()
+
+    # Optional month/year, default current
+    tdy = today()
+    month = int(request.query.month) if 'month' in request.query else tdy.month
+    year = int(request.query.year) if 'year' in request.query else tdy.year
+
+    # Start page
+    s = io.StringIO()
+    header(s)
+    s.write('<h1>Calendar for %d/%d</h1>\n' % (month, year))
+
+    # Hyperlinks for next/prev month
+    nextMonth = month + 1
+    prevMonth = month - 1
+    nextYear = prevYear = year
+    if nextMonth > 12:
+        nextMonth = 1
+        nextYear += 1
+    if prevMonth < 1:
+        prevMonth = 12
+        prevYear -= 1
+    s.write('<a href="/calendar?month=%d&year=%d" class="button">&lt;&lt;&nbsp;Previous</a>\n' % (prevMonth, prevYear))
+    s.write('<a href="/calendar?month=%d&year=%d" class="button">This month</a>\n' % (tdy.month, tdy.year))
+    s.write('<a href="/calendar?month=%d&year=%d" class="button">Next&nbsp;&gt;&gt;</a>\n' % (nextMonth, nextYear))
+
+    # Display calendar heading
+    s.write('<table width="100%" border="1">\n')
+    s.write('<tr class="heading">\n')
+    weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    for d in weekdays:
+        s.write('<td width="14%%">%s</td>\n' % d)
+    s.write('</tr>\n')
+
+    # Get data: total hours worked each day on each project
+    # Date format is "yyyy-mm-dd", so 
+    #   year =  substr(d, 1, 4)
+    #   month = substr(d, 6, 2)
+    #   day =   substr(d, 9, 2)
+    #   year-month = substr(d, 1, 7)
+    q = "select substr(work_date,9,2), p.id, p.name, sum(w.hours), w.billable"
+    q += " from project as p, work as w"
+    q += " where p.id = w.project_id"
+    q += " and substr(work_date, 1, 7) = '%d-%02d'" % (year, month)
+    q += " group by substr(work_date,9,2), p.id, p.name, w.billable"
+    cur.execute(q)
+    ww = cur.fetchall()
+
+    # Assign a colour to each project, and remember each colour's name
+    colors = ['#abc', '#cab', '#cba', '#bca', '#acb', '#bac', '#cde', '#dec', '#edc', '#ced', 
+            'yellow', 'green', 'red', 'blue', 'cyan', 'magenta', 'olive']
+    projCol = {}
+    projName = {}
+    cn = 0
+    for w in ww:
+        day, pid, pname, hrs, billable = w
+        day = int(day)
+        pid = int(pid)
+        if not pid in projCol:
+            if cn >= len(colors):
+                cn = 0
+            projCol[pid] = colors[cn]
+            cn += 1
+        if not pid in projName:
+            projName[pid] = pname
+
+    # Get starting day of week
+    d = date(year, month, 1)
+    dow = d.weekday()
+
+    # Display dates
+    day = 1
+    c = 0
+    dim = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    while day <= dim[month]:
+
+        # Start/finish row
+        if day == 1 or dow == 0:
+            s.write('<tr style="height: 100px">\n')
+        if dow == 7:
+            s.write('<tr style="height: 100px">\n')
+            dow = 0
+        if day == 1 and dow > 0:
+            for i in range(dow):
+                td(s, '&nbsp;')
+
+        # Accumulate hours on each project for this day
+        projHrs = {}  # key is project id, value = hours
+        billable = {}
+        for w in ww:
+            d, pid, pname, hrs, b = w
+            d = int(d)
+            pid = int(pid)
+            if d == day:
+                projHrs[pid] = hrs
+                if b:
+                    billable[pid] = True
+
+        # s.write(day info
+        s.write(' <td>')
+        s.write('%d<br>' % day)
+        for p in projHrs.keys():
+            rh = max(int(projHrs[p] * 10), 15)
+            style = 'background: %s; height: %dpx;' % (projCol[p], rh)
+            pname = projName[p]
+            if billable.get(p, False):
+                style += ' background-image: url(billable.png); background-repeat: repeat;'
+            s.write('<div class="tiny" style="%s">' % style)
+            s.write('<a href="project.py?id=%d">%s</a> (%.1f)</div>' % (p, pname, projHrs[p]))
+        s.write('</td>\n')
+
+        # Prepare for next
+        day += 1
+        dow += 1
+        if dow == 7:
+            s.write('</tr>\n')
+
+    # Finish last row
+    while dow < 7:
+        td(s, '&nbsp;')
+        dow += 1
+
+    # Finish table and page
+    s.write('</tr>\n</table>\n')
     footer(s)
     return s.getvalue()
 
