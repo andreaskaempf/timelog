@@ -19,6 +19,12 @@ if not os.path.exists(dbname):
     db.commit()
     db.close()
 
+# List of project IDs to ignore when calculating utilization (e.g., holidays)
+# TODO: don't hardcode this, or use names instead of IDs
+ignoreProjectIDs = [8,  # Personal: Time off
+    84,                 # Personal: Weekends
+    193]                # ThinkBig: Sick
+
 # Where sessions go (NOT USED YET)
 session_dir = '/tmp/sessions'
 if not os.path.exists(session_dir):
@@ -98,18 +104,23 @@ def log():
 
         # Update counters
         lastDate = wdate
-        dHrs += hrs
-        wHrs += hrs
-        mHrs += hrs
-        totalHrs += hrs
-        if billable:
-            dBillable += hrs
-            wBillable += hrs
-            mBillable += hrs
-            totalBillable += hrs
+        ignoreRow = pid in ignoreProjectIDs
+        if not ignoreRow:
+            dHrs += hrs
+            wHrs += hrs
+            mHrs += hrs
+            totalHrs += hrs
+            if billable:
+                dBillable += hrs
+                wBillable += hrs
+                mBillable += hrs
+                totalBillable += hrs
 
         # Show row for this timelog entry, with link to edit
-        s.write('  <tr>\n')
+        if ignoreRow:
+            s.write('  <tr style="background-color: #fcc">\n')
+        else:
+            s.write('  <tr>\n')
         s.write('    <td><a href="/project/%d">%s</a></td>\n' % (pid, project))
         s.write('    <td align="right"><a href="edit_log/%s">%.2f</a></td>\n' % (wid, hrs))
         if billable:
