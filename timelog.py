@@ -2,7 +2,7 @@
 
 import os, io, uuid
 from sqlite3 import dbapi2 as sql
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from bottle import route, post, run, request, static_file, redirect
 
 # Name of SQLite database 
@@ -773,7 +773,98 @@ def calendar():
 @route('/graphs')
 def graphs():
 
-    return 'This page is under development'
+    # Start page
+    s = io.StringIO()
+    header(s, 'graphs')
+    s.write('<h1>Graphs</h1>')
+
+    # Menu of graphs
+    s.write('<ul>')
+    for g in ['utilization_graph']:
+        s.write('<li><a href="%s">%s</li>' % (g, g.replace('_', ' ').title()))
+    s.write('</ul>')
+
+    # Finish page
+    footer(s)
+    return s.getvalue()
+
+
+@route('/utilization_graph')
+def utilization_graph():
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Start page
+    s = io.StringIO()
+    header(s, 'graphs')
+    s.write('<h1>Utization Graph</h1>\n')
+
+    # TODO: don't hard-code date, and use previous year if before March
+    this_year = 2017
+
+    # Get the time log records for the current year
+    # PROBLEM: the counters will be out or missed, if there are gaps in the dates
+    q = 'select work.id, project_id, client, name, work_date, hours, work.billable, work.description '
+    q += ' from work, project where work.project_id = project.id'
+    q += " and substr(work_date,1,4) >= '%d'" % this_year
+    q += ' order by work_date'  # desc limit 400'
+    cur.execute(q)
+    work = cur.fetchall()
+
+    # Initialize counters
+    dHrs = {}
+    dBillable = {}
+    wHrs = {}
+    wBillable = {} 
+    mHrs =  {}
+    mBillable = {} 
+
+    # Do counters, by week and month
+    for w in work:
+
+        wid, pid, client, projName, wdate, hrs, billable, descr = w
+        wdate = parseDate(wdate)
+
+        # Ignore rows for some projects
+        if pid in ignoreProjectIDs:
+            continue
+
+        # Get keys for week/month
+        wkey = wdate - timedelta(wdate.weekday())   # Monday of this week
+        mkey = date(wdate.year, wdate.month, 1)     # Beginning of month
+
+        # Update counters
+        dHrs[wdate] = dHrs.get(wdate, 0) + hrs
+        wHrs[wkey] = wHrs.get(wkey, 0) + hrs
+        mHrs[mkey] = mHrs.get(mkey, 0) + hrs
+        if billable:
+            dBillable[wdate] = dBillable.get(wdate, 0) + hrs
+            wBillable[wkey] = wBillable.get(wkey, 0) + hrs
+            mBillable[mkey] = mBillable.get(mkey, 0) + hrs
+
+    # Show in a table (for now, graph to do)
+    s.write('<h2>Weekly Utilization</h2>\n')
+    kk = sorted(wHrs.keys())
+    for k in kk:
+        h = wHrs.get(k, 0.0)
+        b = wBillable.get(k, 0.0)
+        pcnt = 0.0 if h == 0 else b / h * 100.0
+        s.write('<p style="font-family: monospace">%s: %4.1f / %4.1f = %3.1f%%</p>\n' % (k, b, h, pcnt))
+
+    s.write('<h2>Monthly Utilization</h2>\n')
+    kk = sorted(mHrs.keys())
+    for k in kk:
+        h = mHrs.get(k, 0.0)
+        b = mBillable.get(k, 0.0)
+        pcnt = 0.0 if h == 0 else b / h * 100.0
+        s.write('<p style="font-family: monospace">%s: %4.1f / %4.1f = %3.1f%%</p>\n' % (k, b, h, pcnt))
+
+
+    # Finish page
+    footer(s)
+    return s.getvalue()
 
 
 #--------------------------------------------------------------------#
@@ -804,7 +895,7 @@ def nextId(table, cur):
 
 
 # Start page
-def header(s):
+def header(s, current = None):  # TODO: highlight current selection
 
     # Static page header
     #s.write('Content-Type: text/html\n\n')
