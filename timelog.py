@@ -1,12 +1,15 @@
 #!/bin/python3
 
-import os, io, uuid
+import os, io, uuid, socket
 from sqlite3 import dbapi2 as sql
 from datetime import date, datetime, timedelta
 from bottle import route, post, run, request, static_file, redirect
 
 # Name of SQLite database 
 dbname = 'timelog.db'
+
+# TODO: don't hard-code date, and use previous year if before March
+this_year = 2018
 
 # If database does not yet exist, create it
 if not os.path.exists(dbname):
@@ -49,8 +52,12 @@ def log():
     s = io.StringIO()
     header(s)
 
+    # Title, with link to go to bottom
+    s.write('<h1>Time Record')
+    s.write('<a href="#bottom" style="font-size: 0.5em; float:right">Go to bottom</a>')
+    s.write('</h1>\n')
+
     # Start table
-    s.write('<h1>Time Record</h1>\n')
     s.write('<table>\n')
     s.write('  <tr>')
     for h in ['Project', 'Hours', 'Billable', 'Description']:
@@ -63,9 +70,6 @@ def log():
     wHrs = wBillable = 0.0
     mHrs = mBillable = 0.0
     totalHrs = totalBillable = 0
-
-    # TODO: don't hard-code date, and use previous year if before March
-    this_year = 2017
 
     # Get the time log records for the current year
     # PROBLEM: the counters will be out or missed, if there are gaps in the dates
@@ -133,9 +137,13 @@ def log():
     # Final subtotals, by day, week, month, and grand total
     summaryRow(s, 'dtotal', formatDate(lastDate), dHrs, dBillable)
     summaryRow(s, 'wtotal', 'Week subtotal:', wHrs, wBillable)
-    summaryRow(s, 'mtotal', 'Month subtotal', dHrs, dBillable)
+    summaryRow(s, 'mtotal', 'Month subtotal', mHrs, mBillable)
     summaryRow(s, 'total', 'Total', totalHrs, totalBillable)
     s.write('</table>\n')
+
+    # Links at bottom (so don't have to scroll up to menu)
+    s.write('<a name="bottom"></a>')
+    s.write('<p style="background: #abc; padding: 8px;">Create <a href="/new_log">new log</a>, <a href="/projects">view projects</a>, or go to <a href="#top">top</a>.</p>\n')
 
     # Finish page
     footer(s)
@@ -268,7 +276,7 @@ def save_log():
         q = q % (wid, pid, wdate, hours, billable, descr)
     cur.execute(q)
     db.commit()
-    redirect('/')
+    redirect('/#bottom')
 
 
 # Delete log entry, ask confirmation first
@@ -515,6 +523,10 @@ def edit_project(pid):
     header(s)
     s.write('<h1>Edit Project</h1>\n')
 
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
     #for e in errs:  # show error messages
     #    print '<p class="message">%s</p>' % e
 
@@ -524,7 +536,7 @@ def edit_project(pid):
 
     # Get existing values if editing a project
     if pid > 0:
-        cur.execute('select client, name, description, billable, active, complete, fees from project where id = %d' % id)
+        cur.execute('select client, name, description, billable, active, complete, fees from project where id = %d' % pid)
         client, name, description, billable, active, complete, fees = cur.fetchone()
         complete = float(complete) if complete else 0.0
         fees = float(fees) if fees else 0.0
@@ -549,6 +561,9 @@ def edit_project(pid):
     s.write('</table>')
     s.write('<input type="submit" value="Save" class="button">')
     s.write('</form>')
+
+    db.close()
+
     footer(s)
     return s.getvalue()
 
@@ -558,7 +573,6 @@ def edit_project(pid):
 def save_project():
     
     # Get fields from form
-    print(list(request.forms.items()))
     pid = int(request.forms.id)
     client = clean(request.forms.client)
     name = clean(request.forms.name)
@@ -801,9 +815,6 @@ def utilization_graph():
     header(s, 'graphs')
     s.write('<h1>Utization Graph</h1>\n')
 
-    # TODO: don't hard-code date, and use previous year if before March
-    this_year = 2017
-
     # Get the time log records for the current year
     # PROBLEM: the counters will be out or missed, if there are gaps in the dates
     q = 'select work.id, project_id, client, name, work_date, hours, work.billable, work.description '
@@ -901,12 +912,18 @@ def header(s, current = None):  # TODO: highlight current selection
     #s.write('Content-Type: text/html\n\n')
     s.write(open('static/header.html').read())
 
+    # Anchor to go to top of page
+    s.write('<a name="top"></a>')
+
     # Show menu
     s.write('<div id="menu">\n')
     for m in menu:
         if m != menu[0]:
             s.write(' | ')
-        s.write('<a href="/%s">%s</a>\n' % (m[1], m[0]))
+        label, href = m
+        if label == 'History':
+            href += '#bottom'
+        s.write('<a href="/%s">%s</a>\n' % (href, label))
     s.write('</div>\n')
 
 
@@ -997,10 +1014,13 @@ def remember_session():
         response.set_cookie('sid', sess['sid'])
 
 
+# Determine a value looks like boolean TRUE
+def isTrue(v):
+    return str(v).lower() in ['1', '1.0', 'true', 'yes']
 
 #--------------------------------------------------------------------#
 #                            START SERVER                            #
-#--------------------------------------------------------------------#
+#-------------------------------------------------------------------#
 
 
 # Serve static files
@@ -1009,6 +1029,7 @@ def serve_static(filename):
     return static_file(filename, root = os.getcwd() + '/static')
 
 
-# Start server
-run(host = 'localhost', port = 8080, reloader = True, debug = True)
+# Start server, debug options on workstations
+wks = socket.gethostname() in ['shuttle', 'brix']
+run(host = 'localhost', port = 8082, reloader = wks, debug = wks, quiet = not wks)
 

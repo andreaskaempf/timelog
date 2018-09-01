@@ -1,0 +1,2 @@
+killall timelog.py
+sudo -u www ./timelog.py &
