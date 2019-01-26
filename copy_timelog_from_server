@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if [ -f timelog.db ]
+then
+  mv -vi timelog.db timelog.db.old
+fi
+
+scp soundience.com:/var/www/timelog/timelog.db .

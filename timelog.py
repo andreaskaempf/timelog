@@ -780,6 +780,182 @@ def calendar():
 
 
 #--------------------------------------------------------------------#
+#                             CONTACTS                               #
+#--------------------------------------------------------------------#
+
+
+# Show list of contacts
+@route('/contacts')
+def contacts():
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Start page
+    s = io.StringIO()
+    header(s, 'contacts')
+    s.write('<h1>Contacts</h1>\n')
+    s.write('<p><a href="/edit_contact/0" class="button">Add contact</a></p>\n')
+
+    # Start table
+    s.write('<table width="100%" border="1">\n')
+    s.write('  <tr class="heading">\n')
+    for h in ['Name', 'Company/Title', 'Phones', 'Address']:
+        s.write('    <th>%s</th>\n' % h)
+    s.write('  </tr>\n')
+
+    # Get contacts and show in table
+    count = 0
+    cur.execute('select id, last_name, first_name, company, title, phones, address, active from contact order by last_name')
+    for c in cur.fetchall():
+
+        cid, lname, fname, company, title, phones, address, active = c
+        count += 1
+
+        style = 'vertical_align: top'
+        if not active:
+            style += '; color: #888; background: #ccc'
+        s.write('<tr style="%s">\n' % style)
+
+        td(s, '<a href="/contact/%d">%s %s</a>' % (cid, fname, lname))
+        td(s, '%s<br/>%s' % (company, title))
+        td(s, phones.replace('\n', '<br/>'))
+        td(s, address.replace('\n', '<br/>'))
+
+    # Finish table and page
+    s.write('</table>\n')
+    s.write('<p>%d contacts</p>\n' % count)
+    footer(s)
+    return(s.getvalue())
+
+
+# Show info for one contact
+@route('/contact/<cid:int>')
+def contact(cid):
+
+    # Start page
+    s = io.StringIO()
+    header(s, 'contacts')
+    s.write('<h1>Contact Details</h1>\n')
+
+    # Get the contact to show, exit if not found
+    db = getDB()
+    cur = db.cursor()
+    cur.execute('select id, last_name, first_name, company, title, comments, active from contact where id = %d' % cid)
+    c = cur.fetchone()
+    if not c:
+        s.write('<p>Contact id %d not found</p>' % cid)
+        footer(s)
+        return s.getvalue()
+
+    # Show contact summary info
+    cid, lname, fname, company, title, comments, active = c
+    s.write('<table width="100%" border="1">\n')
+    tr(s, ['Name:', '%s %s' % (fname, lname)])
+    tr(s, ['Company:', company])
+    tr(s, ['Title:', title])
+    tr(s, ['Comments:', comments.replace('\n', '<br/>')])
+    tr(s, ['Active:', active])
+    s.write('</table>\n')
+
+    # Buttons to edit contact
+    s.write('<p><a href="/edit_contact/%d" class="button">Edit</a></p>\n<hr/>\n' % cid)
+
+    # Show projects for this contact
+    s.write('<p>TODO: show projects for this contact</p>\n')
+
+    # Finish page
+    footer(s)
+    return(s.getvalue())
+
+
+# Show form to edit/create a project
+@route('/edit_contact/<cid:int>')
+def edit_contact(cid):
+
+    # Start page
+    s = io.StringIO()
+    header(s)
+    s.write('<h1>Edit Contact</h1>\n')
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    s.write('<form method="post" action="/save_contact"\n>')
+    s.write('<input type="hidden" name="id" value="%d" />' % cid)
+    s.write('<table width="100%">\n')
+
+    # Get existing values if editing a contact
+    if cid > 0:
+        cur.execute('select id, last_name, first_name, company, title, comments, active from contact where id = %d' % cid)
+        cid, lname, fname, company, title, comments, active = cur.fetchone()
+        active = isTrue(active)
+    else:
+        lname = fname = company = title = comments = ''
+        active = True 
+
+    tr(s, ['Last Name:', '<input type="text" name="last_name" value="%s">' % lname])
+    tr(s, ['First Name:', '<input type="text" name="first_name" value="%s">' % fname])
+    tr(s, ['Company:', '<input type="text" name="company" value="%s">' % company])
+    tr(s, ['Title:', '<input type="text" name="title" value="%s">' % title])
+
+    tr(s, ['Comments:', '<textarea name="comments" cols=80 rows=8>%s</textarea>' % comments])
+
+    checked = 'checked="y"' if active else ''
+    tr(s, ['Active:', '<input type="checkbox" name="active" %s>' % checked])
+
+
+    # End of table and form and page
+    s.write('</table>')
+    s.write('<input type="submit" value="Save" class="button">')
+    s.write('</form>')
+
+    db.close()
+
+    footer(s)
+    return s.getvalue()
+
+
+# Save contact from editing form
+@post('/save_contact')
+def save_contact():
+    
+    # Get fields from form
+    cid = int(request.forms.id)
+    lname = clean(request.forms.last_name)
+    fname = clean(request.forms.first_name)
+    company = clean(request.forms.company)
+    title = clean(request.forms.title)
+    comments = clean(request.forms.comments)
+    active = 1 if 'active' in request.forms else 0
+    phones = address = 'TO DO' 
+
+    # TODO: Check for errors
+    errs = []
+
+    # Save in database, either new or update existing
+    # CREATE TABLE contact (id integer NOT NULL, last_name character(32), first_name character(32), 
+    # company character(32), title character(32), phones text, address text, comments text, active boolean);
+    if not errs:
+        db = getDB()
+        cur = db.cursor()
+        if cid > 0:
+            q = "update contact set last_name = '%s', first_name = '%s', company = '%s', title = '%s', phones = '%s', address = '%s', comments = '%s', active = %d  where id = %d" % (lname, fname, company, title, phones, address, comments, active, cid)
+        else:
+            cid = nextId('contact', cur)
+            q = "insert into contact values (%d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', %d)" % (cid, lname, fname, company, title, phones, address, comments, active)
+        cur.execute(q)
+        db.commit()
+        db.close()
+        redirect('/contact/%d' % cid)
+
+    footer(s)
+    return s.getvalue()
+
+
+#--------------------------------------------------------------------#
 #                             GRAPHS                                 #
 #--------------------------------------------------------------------#
 
@@ -888,7 +1064,8 @@ menu = [
     ['History', ''],
     ['New log', 'new_log'],
     ['Calendar', 'calendar'],
-    ['Projects', 'projects'], #['Contacts', 'contacts.py'],
+    ['Projects', 'projects'], 
+    ['Contacts', 'contacts'],
     ['Graphs', 'graphs']]
 
 
