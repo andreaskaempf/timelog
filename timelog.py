@@ -476,7 +476,8 @@ def project(pid):
     s.write('</table>')
 
     # Display stats by month
-    s.write('<br /><table border="1">')
+    s.write('<h2>Project Statistics</h2>\n')
+    s.write('<table border="1">')
     s.write('<tr>')
     for h in ['Month', 'Billable', 'Non-billable', 'Total']:
         s.write('<th>%s</th>' % h)
@@ -508,6 +509,24 @@ def project(pid):
             brate = fees / (bdays / (complete / 100.0))
             s.write('<p>Effective daily rate based on %.1f%% complete = %.2f</p>' % (complete, rate))
             s.write('<p>Billable only = %.2f</p>' % brate)
+
+    # Show contacts on this project (both colleagues and clients)
+    s.write('<h2>Contacts on this Project</h2>\n')
+    q = 'select c.last_name, c.first_name, c.company, c.title '
+    q += 'from contact as c, project_contact as pc '
+    q += 'where pc.project_id = %d and c.id = pc.contact_id ' % pid
+    q += 'order by c.last_name'
+    cur.execute(q)
+    pcc = cur.fetchall()
+    if len(pcc) == 0:
+        s.write('<p>No people on this project</p>\n')
+    else:
+        s.write('<ul>\n')
+        for pc in pcc:
+            lname, fname, co, title = pc
+            s.write('<li>%s %s (%s, %s)</li>\n' % (fname, lname, title, co))
+        s.write('</ul>\n')
+    s.write('<p><a class="button" href="/project_contacts/%d">Edit list</a></p>\n' % pid)
 
     # Finish page
     footer(s)
@@ -634,6 +653,70 @@ def save_project():
     for e in errs:
         s.write(' <li>%s</li>\n' % e)
     s.write('</ul>\n<p>Click back button to fix errors.</p>\n')
+    footer(s)
+    return s.getvalue()
+
+
+# For to add/remove people from a project
+@route('/project_contacts/<pid:int>')
+def project_contacts(pid):
+
+    # Start page
+    s = io.StringIO()
+    header(s)
+    s.write('<h1>Project Contacts</h1>\n')
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Process additions
+    if 'add' in request.query:
+        cid = int(request.query.add)
+        pcid = nextId('project_contact', cur)
+        cur.execute('insert into project_contact values (%d, %d, %d)' % (pcid, pid, cid))
+        db.commit()
+
+    # Process removals
+    if 'remove' in request.query:
+        pcid = int(request.query.remove)
+        cur.execute('delete from project_contact where id = %d' % pcid)
+        db.commit()
+
+    # Show contacts on this project (both colleagues and clients), with links to remove
+    q = 'select pc.id, c.id, c.last_name, c.first_name, c.company, c.title '
+    q += 'from contact as c, project_contact as pc '
+    q += 'where pc.project_id = %d and c.id = pc.contact_id ' % pid
+    q += 'order by c.last_name'
+    cur.execute(q)
+    pcc = cur.fetchall()
+    already = []
+    s.write('<h3>People on this project</h3>\n')
+    if len(pcc) == 0:
+        s.write('<p>There are no people on this project</p>\n')
+    else:
+        s.write('<ul>\n')
+        for pc in pcc:
+            pcid, cid, lname, fname, co, title = pc
+            already.append(cid)
+            s.write('<li>%s %s (%s, %s) <a href="/project_contacts/%d?remove=%d" class="button">Remove</a></li>\n' % (fname, lname, title, co, pid, pcid))
+        s.write('</ul>\n')
+
+    # Links to add people not already on project
+    s.write('<h3>People who can be added to this project</h3>\n')
+    s.write('<p>Click on the button to add a person to the project:</p>\n')
+    q = 'select id, last_name, first_name, company, title '
+    q += 'from contact order by last_name'
+    cur.execute(q)
+    s.write('<ul>\n')
+    for c in cur.fetchall():
+        cid, lname, fname, co, title = c
+        if not cid in already:
+            s.write('<li>%s %s (%s, %s) <a href="/project_contacts/%d?add=%d" class="button">Add</a></li>\n' % (fname, lname, title, co, pid, cid))
+    s.write('</ul>\n')
+
+    db.close()
+
     footer(s)
     return s.getvalue()
 
@@ -1208,5 +1291,6 @@ def serve_static(filename):
 
 # Start server, debug options on workstations
 wks = socket.gethostname() in ['shuttle', 'brix']
+#print("Host name:", socket.gethostname(), wks)
 run(host = 'localhost', port = 8082, reloader = wks, debug = wks, quiet = not wks)
 
