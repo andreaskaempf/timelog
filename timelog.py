@@ -8,8 +8,9 @@ from bottle import route, post, run, request, static_file, redirect
 # Name of SQLite database 
 dbname = 'timelog.db'
 
-# TODO: don't hard-code date, and use previous year if before March
-this_year = 2018
+# The time log should only include the last 12 months
+# TODO: DON'T HARD CODE THIS, AND ALLOW PEOPLE TO GO BACK FURTHER
+this_month = '2019-01'
 
 # If database does not yet exist, create it
 if not os.path.exists(dbname):
@@ -75,7 +76,7 @@ def log():
     # PROBLEM: the counters will be out or missed, if there are gaps in the dates
     q = 'select work.id, project_id, client, name, work_date, hours, work.billable, work.description '
     q += ' from work, project where work.project_id = project.id'
-    q += " and substr(work_date,1,4) >= '%d'" % this_year
+    q += " and substr(work_date,1,7) >= '%s'" % this_month
     q += ' order by work_date'  # desc limit 400'
     cur.execute(q)
     work = cur.fetchall()
@@ -925,7 +926,7 @@ def contact(cid):
     # Get the contact to show, exit if not found
     db = getDB()
     cur = db.cursor()
-    cur.execute('select id, last_name, first_name, company, title, comments, active from contact where id = %d' % cid)
+    cur.execute('select id, last_name, first_name, company, title, phones, address, comments, active from contact where id = %d' % cid)
     c = cur.fetchone()
     if not c:
         s.write('<p>Contact id %d not found</p>' % cid)
@@ -933,11 +934,13 @@ def contact(cid):
         return s.getvalue()
 
     # Show contact summary info
-    cid, lname, fname, company, title, comments, active = c
+    cid, lname, fname, company, title, phones, address, comments, active = c
     s.write('<table width="100%" border="1">\n')
     tr(s, ['Name:', '%s %s' % (fname, lname)])
     tr(s, ['Company:', company])
     tr(s, ['Title:', title])
+    tr(s, ['Phone numbers:', phones.replace('\n', '<br/>')])
+    tr(s, ['Address:', address.replace('\n', '<br/>')])
     tr(s, ['Comments:', comments.replace('\n', '<br/>')])
     tr(s, ['Active:', active])
     s.write('</table>\n')
@@ -946,7 +949,23 @@ def contact(cid):
     s.write('<p><a href="/edit_contact/%d" class="button">Edit</a></p>\n<hr/>\n' % cid)
 
     # Show projects for this contact
-    s.write('<p>TODO: show projects for this contact</p>\n')
+    s.write('<h2>Projects for this contact</h2>\n')
+    q = 'select p.id, p.client, p.name, p.active '
+    q += 'from project as p, project_contact as pc '
+    q += 'where pc.contact_id = %d and p.id = pc.project_id ' % cid
+    q += 'order by p.name'
+    cur.execute(q)
+    pcp = cur.fetchall()
+    already = []
+    if len(pcp) == 0:
+        s.write('<p>There are no projects for this contact</p>\n')
+    else:
+        s.write('<ul>\n')
+        for pc in pcp:
+            pid, client, pname, pactive = pc
+            s.write('<li>%s: <a href="/project/%d">%s</a></li>\n' % (client, pid, pname))
+        s.write('</ul>\n')
+
 
     # Finish page
     footer(s)
@@ -971,12 +990,14 @@ def edit_contact(cid):
     s.write('<table width="100%">\n')
 
     # Get existing values if editing a contact
+    # CREATE TABLE contact (id integer NOT NULL, last_name character(32), first_name character(32), 
+    # company character(32), title character(32), phones text, address text, comments text, active boolean);
     if cid > 0:
-        cur.execute('select id, last_name, first_name, company, title, comments, active from contact where id = %d' % cid)
-        cid, lname, fname, company, title, comments, active = cur.fetchone()
+        cur.execute('select id, last_name, first_name, company, title, phones, address, comments, active from contact where id = %d' % cid)
+        cid, lname, fname, company, title, phones, address, comments, active = cur.fetchone()
         active = isTrue(active)
     else:
-        lname = fname = company = title = comments = ''
+        lname = fname = company = title = phones = address = comments = ''
         active = True 
 
     tr(s, ['Last Name:', '<input type="text" name="last_name" value="%s">' % lname])
@@ -984,7 +1005,9 @@ def edit_contact(cid):
     tr(s, ['Company:', '<input type="text" name="company" value="%s">' % company])
     tr(s, ['Title:', '<input type="text" name="title" value="%s">' % title])
 
-    tr(s, ['Comments:', '<textarea name="comments" cols=80 rows=8>%s</textarea>' % comments])
+    tr(s, ['Phone numbers:', '<textarea name="phones" cols=80 rows=5>%s</textarea>' % phones])
+    tr(s, ['Address:', '<textarea name="address" cols=80 rows=5>%s</textarea>' % address])
+    tr(s, ['Comments:', '<textarea name="comments" cols=80 rows=5>%s</textarea>' % comments])
 
     checked = 'checked="y"' if active else ''
     tr(s, ['Active:', '<input type="checkbox" name="active" %s>' % checked])
@@ -1011,9 +1034,10 @@ def save_contact():
     fname = clean(request.forms.first_name)
     company = clean(request.forms.company)
     title = clean(request.forms.title)
+    phones = clean(request.forms.phones)
+    address = clean(request.forms.address)
     comments = clean(request.forms.comments)
     active = 1 if 'active' in request.forms else 0
-    phones = address = 'TO DO' 
 
     # TODO: Check for errors
     errs = []
@@ -1078,7 +1102,7 @@ def utilization_graph():
     # PROBLEM: the counters will be out or missed, if there are gaps in the dates
     q = 'select work.id, project_id, client, name, work_date, hours, work.billable, work.description '
     q += ' from work, project where work.project_id = project.id'
-    q += " and substr(work_date,1,4) >= '%d'" % this_year
+    q += " and substr(work_date,1,7) >= '%s'" % this_month
     q += ' order by work_date'  # desc limit 400'
     cur.execute(q)
     work = cur.fetchall()
@@ -1165,12 +1189,20 @@ def nextId(table, cur):
     return nid + 1
 
 
+# Return contents of a file, closing it first
+def readFile(fname):
+    f = open(fname)
+    data = f.read()
+    f.close()
+    return data
+
+
 # Start page
 def header(s, current = None):  # TODO: highlight current selection
 
     # Static page header
     #s.write('Content-Type: text/html\n\n')
-    s.write(open('static/header.html').read())
+    s.write(readFile('static/header.html'))
 
     # Anchor to go to top of page
     s.write('<a name="top"></a>')
