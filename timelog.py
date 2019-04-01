@@ -1063,21 +1063,21 @@ def save_contact():
 
 
 #--------------------------------------------------------------------#
-#                             GRAPHS                                 #
+#                            REPORTS                                 #
 #--------------------------------------------------------------------#
 
 # Save project from editing form
-@route('/graphs')
-def graphs():
+@route('/reports')
+def reports():
 
     # Start page
     s = io.StringIO()
-    header(s, 'graphs')
-    s.write('<h1>Graphs</h1>')
+    header(s, 'reports')
+    s.write('<h1>Reports</h1>')
 
-    # Menu of graphs
+    # Menu of reports
     s.write('<ul>')
-    for g in ['utilization_graph', 'monthly_report']:
+    for g in ['utilization', 'monthly_report']:
         s.write('<li><a href="%s">%s</li>' % (g, g.replace('_', ' ').title()))
     s.write('</ul>')
 
@@ -1086,8 +1086,8 @@ def graphs():
     return s.getvalue()
 
 
-@route('/utilization_graph')
-def utilization_graph():
+@route('/utilization')
+def utilization():
 
     # Connect to database
     db = getDB()
@@ -1095,8 +1095,8 @@ def utilization_graph():
 
     # Start page
     s = io.StringIO()
-    header(s, 'graphs')
-    s.write('<h1>Utization Graph</h1>\n')
+    header(s, 'reports')
+    s.write('<h1>Utization Report</h1>\n')
 
     # Get the time log records for the current year
     # PROBLEM: the counters will be out or missed, if there are gaps in the dates
@@ -1170,7 +1170,7 @@ def monthly_report():
 
     # Start page
     s = io.StringIO()
-    header(s, 'graphs')
+    header(s, 'reports')
 
     # Get the current month and year
     d = today()
@@ -1213,7 +1213,7 @@ menu = [
     ['Calendar', 'calendar'],
     ['Projects', 'projects'], 
     ['Contacts', 'contacts'],
-    ['Graphs', 'graphs']]
+    ['Reports', 'reports']]
 
 
 # Get database handler, new version using SQLite
