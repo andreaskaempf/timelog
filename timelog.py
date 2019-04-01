@@ -1162,7 +1162,8 @@ def utilization():
 
 
 @route('/monthly_report')
-def monthly_report():
+@route('/monthly_report/<yyyymm>')
+def monthly_report(yyyymm = None):
 
     # Connect to database
     db = getDB()
@@ -1172,17 +1173,37 @@ def monthly_report():
     s = io.StringIO()
     header(s, 'reports')
 
-    # Get the current month and year
-    d = today()
-    thismo = '%d-%02d' % (d.year, d.month - 1)
-    s.write('<h1>Monthly Report for %s</h1>\n' % thismo)
+    # Get month
+    if yyyymm:
+        y = int(yyyymm[:4])
+        m = int(yyyymm[4:])
+    else:
+        d = today()
+        y = d.year 
+        m = d.month 
+
+    # Get next/prev month
+    nextY = prevY = y
+    nextM = m + 1
+    if nextM > 12:
+        nextY += 1
+        nextM = 1
+    prevM = m - 1
+    if prevM < 1:
+        prevY -= 1
+        prevM = 12
+
+    # Heading with selected month, links to next/prev
+    s.write('<h1>Monthly Report for %d/%d</h1>\n' % (m, y))
+    s.write('<p>Go to <a href="/monthly_report/%d%02d">previous</a> ' % (prevY, prevM))
+    s.write('/ <a href="/monthly_report/%d%02d">next</a> month</p>' % (nextY, nextM))
 
     # Get hours by project for that month
     # TODO: billable vs. non-billable
     q = 'select p.client, p.name, sum(w.hours)'
     q += ' from work as w, project as p'
     q += ' where w.project_id = p.id'
-    q += " and substr(w.work_date,1,7) = '%s'" % thismo
+    q += " and substr(w.work_date,1,7) = '%d-%02d'" % (y, m)
     q += ' group by p.client, p.name order by client'
     cur.execute(q)
 
@@ -1193,8 +1214,7 @@ def monthly_report():
         totHrs += hrs
         s.write('<p>%s / %s : %.1f hrs = %.1f days</p>\n' % (client, projName, hrs, hrs / 9.0))
 
-    s.write('<p>TOTAL: %.1f hrs = %.1f days</p>\n' % (totHrs, totHrs / 9.0))
-    s.write('<p>%s</p>\n' % q)
+    s.write('<p style="margin-top: 20px">TOTAL: %.1f hrs = %.1f days</p>\n' % (totHrs, totHrs / 9.0))
 
     # Finish page
     footer(s)
