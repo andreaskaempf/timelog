@@ -1077,7 +1077,7 @@ def graphs():
 
     # Menu of graphs
     s.write('<ul>')
-    for g in ['utilization_graph']:
+    for g in ['utilization_graph', 'monthly_report']:
         s.write('<li><a href="%s">%s</li>' % (g, g.replace('_', ' ').title()))
     s.write('</ul>')
 
@@ -1155,6 +1155,46 @@ def utilization_graph():
         pcnt = 0.0 if h == 0 else b / h * 100.0
         s.write('<p style="font-family: monospace">%s: %4.1f / %4.1f = %3.1f%%</p>\n' % (k, b, h, pcnt))
 
+
+    # Finish page
+    footer(s)
+    return s.getvalue()
+
+
+@route('/monthly_report')
+def monthly_report():
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Start page
+    s = io.StringIO()
+    header(s, 'graphs')
+
+    # Get the current month and year
+    d = today()
+    thismo = '%d-%02d' % (d.year, d.month - 1)
+    s.write('<h1>Monthly Report for %s</h1>\n' % thismo)
+
+    # Get hours by project for that month
+    # TODO: billable vs. non-billable
+    q = 'select p.client, p.name, sum(w.hours)'
+    q += ' from work as w, project as p'
+    q += ' where w.project_id = p.id'
+    q += " and substr(w.work_date,1,7) = '%s'" % thismo
+    q += ' group by p.client, p.name order by client'
+    cur.execute(q)
+
+    # Show stats
+    totHrs = 0
+    for r in cur.fetchall():
+        client, projName, hrs = r
+        totHrs += hrs
+        s.write('<p>%s / %s : %.1f hrs = %.1f days</p>\n' % (client, projName, hrs, hrs / 9.0))
+
+    s.write('<p>TOTAL: %.1f hrs = %.1f days</p>\n' % (totHrs, totHrs / 9.0))
+    s.write('<p>%s</p>\n' % q)
 
     # Finish page
     footer(s)
