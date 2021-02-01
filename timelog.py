@@ -8,9 +8,9 @@ from bottle import route, post, run, request, static_file, redirect
 # Name of SQLite database 
 dbname = 'timelog.db'
 
-# The time log should only include the last 12 months
-# TODO: DON'T HARD CODE THIS, AND ALLOW PEOPLE TO GO BACK FURTHER
-this_month = '2019-01'
+# The time log should only include the last 6 months (180 days)
+t0 = datetime.now() - timedelta(180)
+this_month = '%d-%02d' % (t0.year, t0.month)
 
 # If database does not yet exist, create it
 if not os.path.exists(dbname):
@@ -54,7 +54,7 @@ def log():
     header(s)
 
     # Title, with link to go to bottom
-    s.write('<h1>Time Record')
+    s.write('<h1 style="margin-top: 30px">Time Record')
     s.write('<a href="#bottom" style="font-size: 0.5em; float:right">Go to bottom</a>')
     s.write('</h1>\n')
 
@@ -123,7 +123,7 @@ def log():
 
         # Show row for this timelog entry, with link to edit
         if ignoreRow:
-            s.write('  <tr style="background-color: #fcc">\n')
+            s.write('  <tr style="background-color: #fdd">\n')
         else:
             s.write('  <tr>\n')
         s.write('    <td><a href="/project/%d">%s</a></td>\n' % (pid, project))
@@ -142,9 +142,9 @@ def log():
     summaryRow(s, 'total', 'Total', totalHrs, totalBillable)
     s.write('</table>\n')
 
-    # Links at bottom (so don't have to scroll up to menu)
+    # href to bottom, hyperlink to top
     s.write('<a name="bottom"></a>')
-    s.write('<p style="background: #abc; padding: 8px;">Create <a href="/new_log">new log</a>, <a href="/projects">view projects</a>, or go to <a href="#top">top</a>.</p>\n')
+    s.write('<p style="font-size: 0.8em; font-weight: bold; float: right"><a href="#top">Go to top</a></p>\n')
 
     # Finish page
     footer(s)

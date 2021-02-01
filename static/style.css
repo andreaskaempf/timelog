@@ -85,10 +85,22 @@ a.button:link, a.button:visited { text-decoration: none; color: white; backgroun
 a.button:hover { text-decoration: underline; color: white; background: #888; } 
 
 /* Menu */
-#menu { background: #006; color: white; font-weight: bold; padding: 5px; } 
-#menu a:link { text-decoration: none; color: white; } 
+#menu { 
+    /* Menu is fixed at top */
+    position: fixed;
+    top: 0px;
+    left: 0px;
+    width: 100%;
+
+    /* Dark blue background */
+    background-color: #038; 
+    color: white; 
+    font-weight: bold; 
+    padding: 5px; 
+} 
+#menu a:link { text-decoration: none; color: white; padding: 2px 4px; } 
 #menu a:visited { text-decoration: none; color: white; } 
-#menu a:hover { text-decoration: none; color: white; background: #aaa; } 
+#menu a:hover { text-decoration: none; color: white; background: #8ac; } 
 
 
 /* Tables */
