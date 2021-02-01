@@ -54,7 +54,7 @@ def log():
     header(s)
 
     # Title, with link to go to bottom
-    s.write('<h1 style="margin-top: 30px">Time Record')
+    s.write('<h1>Time Record')
     s.write('<a href="#bottom" style="font-size: 0.5em; float:right">Go to bottom</a>')
     s.write('</h1>\n')
 
@@ -324,7 +324,7 @@ def projects(show):
     # Start page
     s = io.StringIO()
     header(s)
-    s.write('<h1>Project</h1>\n')
+    s.write('<h1>Projects</h1>\n')
     s.write('<p><a href="/edit_project/0" class="button">Add project</a> | Show: ')
     for x in ['active', 'inactive', 'all']:
         if x == show:
@@ -1086,6 +1086,7 @@ def reports():
     return s.getvalue()
 
 
+# Weekly & Monthly utilization report
 @route('/utilization')
 def utilization():
 
@@ -1096,7 +1097,8 @@ def utilization():
     # Start page
     s = io.StringIO()
     header(s, 'reports')
-    s.write('<h1>Utization Report</h1>\n')
+    s.write('<div style="padding: 32px">\n')
+    s.write('<h1>Utilization Report</h1>\n')
 
     # Get the time log records for the current year
     # PROBLEM: the counters will be out or missed, if there are gaps in the dates
@@ -1155,8 +1157,8 @@ def utilization():
         pcnt = 0.0 if h == 0 else b / h * 100.0
         s.write('<p style="font-family: monospace">%s: %4.1f / %4.1f = %3.1f%%</p>\n' % (k, b, h, pcnt))
 
-
     # Finish page
+    s.write('</div>\n')
     footer(s)
     return s.getvalue()
 
@@ -1194,9 +1196,10 @@ def monthly_report(yyyymm = None):
         prevM = 12
 
     # Heading with selected month, links to next/prev
+    s.write('<div style="padding: 32px">\n')
     s.write('<h1>Monthly Report for %d/%d</h1>\n' % (m, y))
-    s.write('<p>Go to <a href="/monthly_report/%d%02d">previous</a> ' % (prevY, prevM))
-    s.write('/ <a href="/monthly_report/%d%02d">next</a> month</p>' % (nextY, nextM))
+    s.write('<p style="font-size: 0.8em; margin-bottom: 32px;">Go to <a href="/monthly_report/%d%02d">&lt;&lt; previous</a> ' % (prevY, prevM))
+    s.write('/ <a href="/monthly_report/%d%02d">next &gt;&gt;</a> month</p>' % (nextY, nextM))
 
     # Get hours by project for that month
     # TODO: billable vs. non-billable
@@ -1207,16 +1210,37 @@ def monthly_report(yyyymm = None):
     q += ' group by p.client, p.name order by client'
     cur.execute(q)
 
+    # Start table
+    s.write('<table>\n')
+    s.write('<tr>\n')
+    for h in ['Client', 'Project', 'Hours', 'Days']:
+        s.write('  <th>%s</th>\n' % h)
+    s.write('</tr>\n')
+
     # Show stats
     totHrs = 0
     for r in cur.fetchall():
         client, projName, hrs = r
         totHrs += hrs
-        s.write('<p>%s / %s : %.1f hrs = %.1f days</p>\n' % (client, projName, hrs, hrs / 9.0))
+        s.write('<tr>\n')
+        #s.write('<p>%s / %s : %.1f hrs = %.1f days</p>\n' % (client, projName, hrs, hrs / 9.0))
+        s.write('<td>%s</td>\n' % client)
+        s.write('<td>%s</td>\n' % projName)
+        s.write('<td align="right">%.1f</td>\n' % hrs)
+        s.write('<td align="right">%.1f</td>\n' % (hrs / 8.0))
+        s.write('</tr>\n')
 
-    s.write('<p style="margin-top: 20px">TOTAL: %.1f hrs = %.1f days</p>\n' % (totHrs, totHrs / 9.0))
+    # Show totals
+    s.write('<tr style="font-weight: bold">\n')
+    s.write('<td>TOTAL</td>\n')
+    s.write('<td>&nbsp;</td>\n')
+    s.write('<td align="right">%.1f</td>\n' % totHrs)
+    s.write('<td align="right">%.1f</td>\n' % (totHrs / 8.0))
 
-    # Finish page
+    # Finish table & page
+    s.write('</table>\n')
+    s.write('<p style="margin-top: 32px; font-size: 0.8em">Note: day = 8 hours</p>\n')
+    s.write('</div>\n')
     footer(s)
     return s.getvalue()
 
