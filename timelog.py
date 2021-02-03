@@ -1077,7 +1077,7 @@ def reports():
 
     # Menu of reports
     s.write('<ul>')
-    for g in ['utilization', 'monthly_report']:
+    for g in ['utilization', 'monthly_report', 'project_graph']:
         s.write('<li><a href="%s">%s</li>' % (g, g.replace('_', ' ').title()))
     s.write('</ul>')
 
@@ -1240,6 +1240,72 @@ def monthly_report(yyyymm = None):
     # Finish table & page
     s.write('</table>\n')
     s.write('<p style="margin-top: 32px; font-size: 0.8em">Note: day = 8 hours</p>\n')
+    s.write('</div>\n')
+    footer(s)
+    return s.getvalue()
+
+
+# Stacked area graph of daily/weekly time on projects
+@route('/project_graph')
+#@route('/monthly_report')
+#@route('/monthly_report/<yyyymm>')
+def project_graph():
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Start page
+    s = io.StringIO()
+    header(s, 'reports')
+    s.write('<div style="padding: 32px">\n')
+    s.write('<h1>Project Activity Graph</h1>\n')
+
+    # Get daily hours by project
+    # TODO: date range
+    q = 'select w.work_date, p.client, p.name, w.hours'
+    q += ' from work as w, project as p'
+    q += ' where w.project_id = p.id'
+    #q += " and substr(w.work_date,1,7) = '%d-%02d'" % (y, m)
+    cur.execute(q)
+
+    # Group by week or month
+    ghrs = {}  # Key = project, value = {period: hours}
+    for r in cur.fetchall():
+        ds, c, p, hrs = r  # Date is "yyyy-mm-dd"
+        d = datetime.strptime(ds, '%Y-%m-%d').date()
+        wd = d - timedelta(d.weekday())  # Beginning of week
+        cp = c + ': ' + p  # Client & project
+        if not cp in ghrs:
+            ghrs[cp] = {}
+        ghrs[cp][wd] = ghrs[cp].get(wd,0) + hrs
+
+    # Create the SVG tag with ID
+    s.write('<svg id="graph" width="800" height="400" style="border: 1px solid #ccc" />\n')
+
+    # Show data in script tag, an array of arrays, each the
+    # project name followed by [x,y] pairs
+    s.write('<script>\n')
+    s.write('var data = [\n')
+    first = True
+    for cp in ghrs.keys():
+        if first:
+            first = False
+        else:
+            s.write(',\n')
+        s.write('  ["%s"' % cp)
+        wh = ghrs[cp]  # for this project, weekdate => hours
+        for d in wh.keys():
+            s.write(', [new Date(%d,%d,%d), %.2f]' % (d.year, d.month, d.day, wh[d]))
+        s.write(' ]')
+    s.write(' ];\n')
+    s.write('</script>\n')
+
+    # Embed script tags for D3 and the graph
+    s.write('<script language="JavaScript" type="text/javascript" src="/static/d3.min.js"></script>\n')
+    s.write('<script language="JavaScript" type="text/javascript" src="/static/script.js"></script>\n')
+
+    # Finish page
     s.write('</div>\n')
     footer(s)
     return s.getvalue()

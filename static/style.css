@@ -136,3 +136,16 @@ th {
 }
 
 
+/* For D3 graphs */
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.browser text {
+  text-anchor: end;
+}
+
