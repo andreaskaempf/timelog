@@ -1,4 +1,6 @@
-/* Script to draw stacked area chart of weekly project hours */
+/* 
+ * Script to draw stacked area chart of weekly project hours
+ */
 
 // Get the SVG, and its dimensions
 var svg = d3.select("#graph"),
@@ -94,7 +96,15 @@ for ( var i = dd.length - nproj; i < dd.length; ++i ) {
         .attr("id", label)   // For tooltip
         .attr("stroke", color)
         .attr("stroke-width", 2)
-        .on("mouseover", function(d) { tooltip.text(this.id) })
+        .on("mouseover", function(d) { 
+            tooltip.style("visibility", "visible");
+            //console.log(d3.mouse(this));
+            //console.log(e);
+            tooltip.text(this.id);
+        })
+        .on("mouseout", function(d) { 
+            tooltip.style("visibility", "hidden");
+        })
         .attr("d", d3.line()
             .x(p => xScale(p[0]))
             .y(p => yScale(p[1])));
@@ -163,3 +173,40 @@ d3.csv("data.csv", function(error, data) {
       .call(yAxis);
 });
 */
+
+/* Stack layout tests */
+
+
+/* Convert data to array of objects, with keys "week" for the week, and
+ * key: value for each project
+ */
+
+// Collect a list of the months, and all the projects
+var projects = [], periods = [];
+for ( var i = 0; i < data.length; ++i ) {
+    var proj = data[i],
+        points = data.slice(1);
+    if ( projects.index(proj) < 0 )
+        projects.push(proj);
+    for ( var j = 1; j < points.length; ++j ) {
+        per = points[j][0];
+        if ( periods.index(per) < 0 )
+            periods.push(per);
+    }
+}
+
+// Create array of data for stacking, i.e., array of objects, 
+// with keys "week" for the week, and key: value for each project
+
+var sdata = [];
+periods = periods.sort();
+for ( var pi = i; pi < periods.length; ++ pi ) {
+}
+
+
+var stk = d3.stack(dataX);
+console.log(stk());
+
+//dd = stk.stack(dataX);
+//console.log(dd);
+
