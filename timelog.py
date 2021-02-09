@@ -1077,7 +1077,7 @@ def reports():
 
     # Menu of reports
     s.write('<ul>')
-    for g in ['utilization', 'monthly_report', 'project_graph']:
+    for g in ['utilization', 'monthly_report', 'timesheet', 'project_graph']:
         s.write('<li><a href="%s">%s</li>' % (g, g.replace('_', ' ').title()))
     s.write('</ul>')
 
@@ -1245,6 +1245,103 @@ def monthly_report(yyyymm = None):
     return s.getvalue()
 
 
+# Timesheet report, hours on each project for a week Mon-Sun
+@route('/timesheet')
+@route('/timesheet/<yyyymmdd>')
+def timesheet(yyyymmdd = None):
+
+    # Connect to database
+    db = getDB()
+    cur = db.cursor()
+
+    # Start page
+    s = io.StringIO()
+    header(s, 'reports')
+
+    # Get starting date for week, either from URL or this week
+    if yyyymmdd == None or yyyymmdd == 'this':
+        d = today()
+    else:
+        d = parseDate(yyyymmdd)
+    if d.weekday() > 0:
+        d -= timedelta(d.weekday())  # Monday of week
+
+    # Heading with selected week, links to next/prev week
+    s.write('<div style="padding: 32px">\n')
+    s.write('<h1>Timesheet for %s</h1>\n' % fmtDate(d))
+    s.write('<p style="font-size: 0.8em; margin-bottom: 32px;">Go to ')
+    s.write('<a href="/timesheet/%s">&lt;&lt; previous</a> ' % fmtDate(d - timedelta(7)))
+    s.write('/ <a href="/timesheet/this">this</a> ')
+    s.write('/ <a href="/timesheet/%s">next &gt;&gt;</a> week</p>' % fmtDate(d + timedelta(7)))
+
+    # Get daily hours by project for that week
+    q = 'select p.client, p.name, w.work_date, sum(w.hours)'
+    q += ' from work as w, project as p'
+    q += ' where w.project_id = p.id'
+    q += " and w.work_date >= '%s'" % fmtDate(d)
+    q += " and w.work_date <= '%s'" % fmtDate(d + timedelta(6))
+    q += ' group by p.client, p.name, w.work_date order by p.client, p.name, w.work_date'
+    cur.execute(q)
+
+    # Turn it into a dictionary
+    work = {}  # proj => { date => hrs }
+    for r in cur.fetchall():
+        client, projName, dt, hrs = r
+        dt = parseDate(dt)
+        k = (client, projName)
+        if not k in work:
+            work[k] = {}
+        work[k][dt] = work[k].get(dt,0) + hrs
+
+    # Show in table, one row per project, one col per day
+    s.write('<table>\n')
+    s.write('<tr>\n')
+    for h in ['Client', 'Project']:
+        s.write('  <th>%s</th>\n' % h)
+    for di in range(7):
+        dt = d + timedelta(di)
+        dow = dnames[dt.weekday()]
+        s.write('  <th style="text-align: right">%s %02d/%02d</th>\n' % (dow, dt.day, dt.month))
+    s.write('  <th style="text-align: right">Total</th>\n')
+    s.write('</tr>\n')
+
+    # One row for each project
+    dayTotals = {}
+    for k in work.keys():
+        s.write('<tr>\n')
+        s.write('  <td>%s</td><td>%s</td>\n' % k) # Client, Project
+        wtot = 0
+        for di in range(7):
+            dt = d + timedelta(di)
+            hrs = work[k].get(dt, 0)
+            if hrs == 0:
+                s.write('  <td>&nbsp;</td>\n')
+            else:
+                s.write('  <td align="right">%.2f</td>\n' % hrs)
+                wtot += hrs
+                dayTotals[dt] = dayTotals.get(dt,0) + hrs
+        s.write('  <td style="text-align: right; font-weight: bold">%.2f</td>\n' % wtot)
+        s.write('<tr>\n')
+
+    # Totals row
+    s.write('<tr style="font-weight: bold">\n')
+    s.write('  <td>&nbsp;</td><td>&nbsp;</td>\n')
+    gtot = 0
+    for di in range(7):
+        dt = d + timedelta(di)
+        hrs = dayTotals.get(dt,0)
+        gtot += hrs
+        s.write('  <td style="text-align: right">%.2f</td>\n' % hrs)
+    s.write('  <td style="text-align: right">%.2f</td>\n' % gtot)
+    s.write('<tr>\n')
+
+    # Finish table & page
+    s.write('</table>\n')
+    s.write('</div>\n')
+    footer(s)
+    return s.getvalue()
+
+
 # Stacked area graph of daily/weekly time on projects
 @route('/project_graph')
 #@route('/monthly_report')
@@ -1273,7 +1370,7 @@ def project_graph():
     ghrs = {}  # Key = project, value = {period: hours}
     for r in cur.fetchall():
         ds, c, p, hrs = r  # Date is "yyyy-mm-dd"
-        d = datetime.strptime(ds, '%Y-%m-%d').date()
+        d = parseDate(ds)
         wd = d - timedelta(d.weekday())  # Beginning of week
         cp = c + ': ' + p  # Client & project
         if not cp in ghrs:
@@ -1390,10 +1487,11 @@ def td(s, c):
 # Parse "yyyy-mm-dd" into a date object
 def parseDate(s):
     try:
-        y, m, d = [int(x) for x in s.split('-')]
-        return date(y,m,d)
+        #y, m, d = [int(x) for x in s.split('-')]
+        #return date(y,m,d)
+        return datetime.strptime(s, '%Y-%m-%d').date()
     except:   # Exception, e:
-        return('(Invalid date)')
+        return None
 
 
 # Format date as "Mon 23/04/2015" 
@@ -1406,6 +1504,12 @@ def formatDate(dt):
         return '%s %02d/%02d/%d' % (dow, dt.day, dt.month, dt.year)
     else:
         return '(no date)'
+
+
+# Format date as yyyy-mm-dd
+def fmtDate(dt):
+    return datetime.strftime(dt, '%Y-%m-%d')
+
 
 # Today's date
 def today():
