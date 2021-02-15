@@ -8,11 +8,13 @@ var svg = d3.select("#graph"),
     height = svg.attr("height"),
     margin = {top: 20, right: 20, bottom: 30, left: 50};
 
-// Do the last n projects
-nproj = 30;
+// Maximum number of projects to show
+var nproj = 50;
+
+// Only show projects that where active on or after this date
+var pdate = new Date(2019, 1, 1);
 
 // Filter projects for those that were active on or after a certain date
-var pdate = new Date(2019, 1, 1);
 var dd = [];
 for ( var i = 0; i < data.length; ++i ) {
     var active = false;
@@ -27,6 +29,10 @@ for ( var i = 0; i < data.length; ++i ) {
         dd.push(data[i]);
 }
 
+// Limit to the last n projects
+if ( nproj >= dd.length )
+    nproj = dd.length;
+
 // Get the min/max X and Y values
 var minDate = null, maxDate = null, minVal = null, maxVal = null;
 for ( var i = dd.length - nproj; i < dd.length; ++i ) {
@@ -38,6 +44,12 @@ for ( var i = dd.length - nproj; i < dd.length; ++i ) {
         if ( maxVal == null || y > maxVal ) maxVal = y;
     }
 }
+
+// Only look at dates after specified start
+if ( minDate < pdate )
+    minDate = pdate;
+if ( maxDate < pdate )
+    maxDate = pdate;
 
 // Define scales
 var xScale = d3.scaleTime().domain([minDate, maxDate]).range([margin.left, width - margin.right]);
@@ -52,7 +64,7 @@ svg.append("g").attr("transform", "translate(" + margin.left + ",0)").call(yAxis
 // Comparison function for sorting list of points by date
 function cmp(a, b) { return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0) };
 
-// List of color names
+// List of color names (will circle if more that these many lines)
 var colors = ["#c93f38", "#a59344", "#7b463b", "#dd3366", "#191970",
         "#ab7f46", "#225577", "#c0a98e", "#d2d2c0", "#9bafad",
         "#990066", "#3d1c02", "#ffaabb", "#d1edee", "#d3dde4",
@@ -78,17 +90,20 @@ for ( var i = dd.length - nproj; i < dd.length; ++i ) {
         ci -= colors.length;
     var color = colors[ci];
 
-    // Sort the series by date
+    // Filter the points to only include on or after desired start date, and sort them
+    points = points.filter(p => p[0] >= pdate);
     points = points.sort(cmp);
 
     // Create a tooltip div
     var tooltip = d3.select("body").append("div")
         .attr("id", "tooltip")
         .attr("width", "100px")
+        .style("background-color", "#cef")
+        .style("padding", "8px")
         .style("position", "fixed")
-        .style("top", "100px")
-        .style("left", "50px")
-        .style("border", "1px solid #ccc"); // .text("-");
+        .style("top", "140px")
+        .style("left", "100px") //.text("Mouseover line to see project");
+        .style("visibility", "hidden");
         
     // Draw a line graph of the series
     svg.append("path").datum(points)
@@ -96,10 +111,11 @@ for ( var i = dd.length - nproj; i < dd.length; ++i ) {
         .attr("id", label)   // For tooltip
         .attr("stroke", color)
         .attr("stroke-width", 2)
-        .on("mouseover", function(d) { 
+        .on("mouseover", function(e) { 
             tooltip.style("visibility", "visible");
-            //console.log(d3.mouse(this));
-            //console.log(e);
+            console.log(e);
+            tooltip.style("top", e.clientY - 4);
+            tooltip.style("left", e.clientX + 4);
             tooltip.text(this.id);
         })
         .on("mouseout", function(d) { 
@@ -110,103 +126,4 @@ for ( var i = dd.length - nproj; i < dd.length; ++i ) {
             .y(p => yScale(p[1])));
 }
 
-
-/*
-var area = d3.svg.area()
-    .x(function(d) { return x(d.date); })
-    .y0(function(d) { return y(d.y0); })
-    .y1(function(d) { return y(d.y0 + d.y); });
-
-var stack = d3.layout.stack()
-    .values(function(d) { return d.values; });
-
-
-d3.csv("data.csv", function(error, data) {
-  color.domain(d3.keys(data[0]).filter(function(key) { return key !== "date"; }));
-  data.forEach(function(d) {
-  	d.date = parseDate(d.date);
-  });
-
-  var browsers = stack(color.domain().map(function(name) {
-    return {
-      name: name,
-      values: data.map(function(d) {
-        return {date: d.date, y: d[name] * 1};
-      })
-    };
-  }));
-
-  // Find the value of the day with highest total value
-  var maxDateVal = d3.max(data, function(d){
-    var vals = d3.keys(d).map(function(key){ return key !== "date" ? d[key] : 0 });
-    return d3.sum(vals);
-  });
-
-  // Set domains for axes
-  x.domain(d3.extent(data, function(d) { return d.date; }));
-  y.domain([0, maxDateVal])
-
-  var browser = svg.selectAll(".browser")
-      .data(browsers)
-    .enter().append("g")
-      .attr("class", "browser");
-
-  browser.append("path")
-      .attr("class", "area")
-      .attr("d", function(d) { return area(d.values); })
-      .style("fill", function(d) { return color(d.name); });
-
-  browser.append("text")
-      .datum(function(d) { return {name: d.name, value: d.values[d.values.length - 1]}; })
-      .attr("transform", function(d) { return "translate(" + x(d.value.date) + "," + y(d.value.y0 + d.value.y / 2) + ")"; })
-      .attr("x", -6)
-      .attr("dy", ".35em")
-      .text(function(d) { return d.name; });
-
-  svg.append("g")
-      .attr("class", "x axis")
-      .attr("transform", "translate(0," + height + ")")
-      .call(xAxis);
-
-  svg.append("g")
-      .attr("class", "y axis")
-      .call(yAxis);
-});
-*/
-
-/* Stack layout tests */
-
-
-/* Convert data to array of objects, with keys "week" for the week, and
- * key: value for each project
- */
-
-// Collect a list of the months, and all the projects
-var projects = [], periods = [];
-for ( var i = 0; i < data.length; ++i ) {
-    var proj = data[i],
-        points = data.slice(1);
-    if ( projects.index(proj) < 0 )
-        projects.push(proj);
-    for ( var j = 1; j < points.length; ++j ) {
-        per = points[j][0];
-        if ( periods.index(per) < 0 )
-            periods.push(per);
-    }
-}
-
-// Create array of data for stacking, i.e., array of objects, 
-// with keys "week" for the week, and key: value for each project
-
-var sdata = [];
-periods = periods.sort();
-for ( var pi = i; pi < periods.length; ++ pi ) {
-}
-
-
-var stk = d3.stack(dataX);
-console.log(stk());
-
-//dd = stk.stack(dataX);
-//console.log(dd);
 

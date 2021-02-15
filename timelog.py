@@ -1344,8 +1344,6 @@ def timesheet(yyyymmdd = None):
 
 # Stacked area graph of daily/weekly time on projects
 @route('/project_graph')
-#@route('/monthly_report')
-#@route('/monthly_report/<yyyymm>')
 def project_graph():
 
     # Connect to database
@@ -1357,6 +1355,14 @@ def project_graph():
     header(s, 'reports')
     s.write('<div style="padding: 32px">\n')
     s.write('<h1>Project Activity Graph</h1>\n')
+
+    # Stacking can be turned on by appending "?stack=1" to the URL
+    do_stack = request.params.get('stack', 0)
+    s.write('<p>Stacking: ')
+    if do_stack:
+        s.write('<b>on</b> / <a href="/project_graph">off</a></p>\n')
+    else:
+        s.write('<a href="/project_graph?stack=1">on</a> / <b>off</b></p>\n')
 
     # Get daily hours by project
     # TODO: date range
@@ -1380,20 +1386,26 @@ def project_graph():
     # Create the SVG tag with ID
     s.write('<svg id="graph" width="800" height="400" style="border: 1px solid #ccc" />\n')
 
-    # Show data in script tag, an array of arrays, each the
-    # project name followed by [x,y] pairs
+    # Show data in script tag, an array of arrays, each like:
+    # ["project", [x1,y1], [x2,y2],...]
     s.write('<script>\n')
     s.write('var data = [\n')
-    first = True
-    for cp in ghrs.keys():
-        if first:
-            first = False
-        else:
+    projs = list(ghrs.keys())
+    stack = {}   # Total hours so far for each date, for stacking
+    for cp in projs:
+        if cp != projs[0]:  # Comma except for first
             s.write(',\n')
         s.write('  ["%s"' % cp)
         wh = ghrs[cp]  # for this project, weekdate => hours
-        for d in wh.keys():
-            s.write(', [new Date(%d,%d,%d), %.2f]' % (d.year, d.month, d.day, wh[d]))
+        d = min(wh.keys())
+        dmax = max(wh.keys())
+        while d <= dmax: #d in wh.keys():
+            h = h0 = wh.get(d,0)
+            if do_stack:
+                h0 += stack.get(d,0) 
+                stack[d] = stack.get(d,0) + h
+            s.write(', [new Date(%d,%d,%d), %.2f]' % (d.year, d.month, d.day, h0))
+            d += timedelta(7)
         s.write(' ]')
     s.write(' ];\n')
     s.write('</script>\n')
