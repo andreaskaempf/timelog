@@ -12,10 +12,10 @@ var svg = d3.select("#graph"),
 var nproj = 50;
 
 // Only show projects that where active on or after this date
-var pdate = new Date(2019, 1, 1);
+//var pdate = new Date(2019, 1, 1);
 
 // Filter projects for those that were active on or after a certain date
-var dd = [];
+/*var dd = [];
 for ( var i = 0; i < data.length; ++i ) {
     var active = false;
     for ( var j = 1; j < data[i].length; ++j ) {
@@ -27,7 +27,10 @@ for ( var i = 0; i < data.length; ++i ) {
     }
     if ( active )
         dd.push(data[i]);
-}
+}*/
+
+// Date filtering is now done on the back-end
+var dd = data;
 
 // Limit to the last n projects
 if ( nproj >= dd.length )
@@ -46,10 +49,10 @@ for ( var i = dd.length - nproj; i < dd.length; ++i ) {
 }
 
 // Only look at dates after specified start
-if ( minDate < pdate )
-    minDate = pdate;
+/* #if ( minDate < pdate )
+    #    minDate = pdate;
 if ( maxDate < pdate )
-    maxDate = pdate;
+    maxDate = pdate; */
 
 // Define scales
 var xScale = d3.scaleTime().domain([minDate, maxDate]).range([margin.left, width - margin.right]);

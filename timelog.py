@@ -1,9 +1,9 @@
 #!/bin/python3
 
-import os, io, uuid, socket
+import os, io, uuid, socket, json
 from sqlite3 import dbapi2 as sql
 from datetime import date, datetime, timedelta
-from bottle import route, post, run, request, static_file, redirect
+from bottle import route, post, run, request, response, static_file, redirect
 
 # Name of SQLite database 
 dbname = 'timelog.db'
@@ -29,7 +29,7 @@ ignoreProjectIDs = [8,  # Personal: Time off
     84,                 # Personal: Weekends
     193]                # ThinkBig: Sick
 
-# Where sessions go (NOT USED YET)
+# Where sessions go
 session_dir = '/tmp/sessions'
 if not os.path.exists(session_dir):
     print('Creating session directory:', session_dir)
@@ -1356,20 +1356,66 @@ def project_graph():
     s.write('<div style="padding: 32px">\n')
     s.write('<h1>Project Activity Graph</h1>\n')
 
-    # Stacking can be turned on by appending "?stack=1" to the URL
-    do_stack = request.params.get('stack', 0)
-    s.write('<p>Stacking: ')
-    if do_stack:
-        s.write('<b>on</b> / <a href="/project_graph">off</a></p>\n')
-    else:
-        s.write('<a href="/project_graph?stack=1">on</a> / <b>off</b></p>\n')
+    # Use sessions to remember settings, e.g., stacking
+    sess = get_session()
 
-    # Get daily hours by project
+    # Stacking can be turned on by appending "?stack=1" to the URL
+    # Get from session if not specified
+    if 'stack' in request.params:
+        do_stack = sess['stack'] = int(request.params['stack'])
+    elif 'stack' in sess:
+        do_stack = sess['stack']
+    else:
+        do_stack = sess['stack'] = 0  # Default off
+
+    # Date filter can be set by appending ?period=xxx to URL
+    # Get from session if not specified
+    if 'period' in request.params:
+        period = sess['period'] = request.params['period']
+    elif 'period' in sess:
+        period = sess['period']
+    else:
+        period = sess['period'] = '90d'  # Default last 90 days
+
+    # Save settings in session
+    save_session(sess)
+
+    # Allow changing stacking
+    s.write('<p>Stacking: ')
+    if do_stack == 1:
+        s.write('<b>on</b> / <a href="/project_graph?stack=0">off</a>\n')
+    else:
+        s.write('<a href="/project_graph?stack=1">on</a> / <b>off</b>\n')
+
+    # Period to filter dates
+    periods = ['30d', '90d', '180d', 'year', 'all']
+    s.write('| Show: ')
+    for p in periods:
+        if p == period:
+            s.write('<b>%s</b> ' % p)
+        else:
+            s.write('<a href="/project_graph?period=%s">%s</a> ' % (p, p))
+    s.write('</p>\n')
+
+    # Get daily hours by project, only up to today
     # TODO: date range
     q = 'select w.work_date, p.client, p.name, w.hours'
     q += ' from work as w, project as p'
     q += ' where w.project_id = p.id'
-    #q += " and substr(w.work_date,1,7) = '%d-%02d'" % (y, m)
+    until = today()
+    if period == '30d':
+        d0 = today() - timedelta(30)
+    elif period == '90d':
+        d0 = today() - timedelta(90)
+    elif period == '180d':
+        d0 = today() - timedelta(180)
+    elif period == 'year':
+        d0 = today() - timedelta(365)
+    else:
+        d0 = None   # All dates
+    if d0:
+        q += " and w.work_date >= '%s'" % fmtDate(d0)
+    q += " and w.work_date <= '%s'" % fmtDate(until)
     cur.execute(q)
 
     # Group by week or month
