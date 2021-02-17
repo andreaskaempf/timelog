@@ -1,5 +1,5 @@
 /* 
- * Script to draw stacked area chart of weekly project hours
+ * Script to draw line chart of weekly project hours, stacked or unstacked
  */
 
 // Get the SVG, and its dimensions
@@ -10,24 +10,6 @@ var svg = d3.select("#graph"),
 
 // Maximum number of projects to show
 var nproj = 50;
-
-// Only show projects that where active on or after this date
-//var pdate = new Date(2019, 1, 1);
-
-// Filter projects for those that were active on or after a certain date
-/*var dd = [];
-for ( var i = 0; i < data.length; ++i ) {
-    var active = false;
-    for ( var j = 1; j < data[i].length; ++j ) {
-        var p = data[i][j], x = p[0], y = p[1];
-        if ( x >= pdate ) {
-            active = true;
-            break;
-        }
-    }
-    if ( active )
-        dd.push(data[i]);
-}*/
 
 // Date filtering is now done on the back-end
 var dd = data;
@@ -47,12 +29,6 @@ for ( var i = dd.length - nproj; i < dd.length; ++i ) {
         if ( maxVal == null || y > maxVal ) maxVal = y;
     }
 }
-
-// Only look at dates after specified start
-/* #if ( minDate < pdate )
-    #    minDate = pdate;
-if ( maxDate < pdate )
-    maxDate = pdate; */
 
 // Define scales
 var xScale = d3.scaleTime().domain([minDate, maxDate]).range([margin.left, width - margin.right]);
@@ -94,10 +70,9 @@ for ( var i = dd.length - nproj; i < dd.length; ++i ) {
     var color = colors[ci];
 
     // Filter the points to only include on or after desired start date, and sort them
-    points = points.filter(p => p[0] >= pdate);
     points = points.sort(cmp);
 
-    // Create a tooltip div
+    // Create a tooltip div (TODO: This could be a text element)
     var tooltip = d3.select("body").append("div")
         .attr("id", "tooltip")
         .attr("width", "100px")
