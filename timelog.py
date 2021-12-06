@@ -843,7 +843,7 @@ def calendar():
             if billable.get(p, False):
                 style += ' background-image: url(billable.png); background-repeat: repeat;'
             s.write('<div class="tiny" style="%s">' % style)
-            s.write('<a href="project.py?id=%d">%s</a> (%.1f)</div>' % (p, pname, projHrs[p]))
+            s.write('<a href="project/%d">%s</a> (%.1f)</div>' % (p, pname, projHrs[p]))
         s.write('</td>\n')
 
         # Prepare for next
