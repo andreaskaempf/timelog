@@ -1634,7 +1634,7 @@ def serve_static(filename):
 
 
 # Start server, debug options on workstations
-wks = socket.gethostname() in ['shuttle', 'brix']
+wks = socket.gethostname() in ['shuttle', 'brix', 'MUNMAC-45759-1']
 #print("Host name:", socket.gethostname(), wks)
-run(host = 'localhost', port = 8082, reloader = wks, debug = wks, quiet = not wks)
+run(host = 'localhost', port = 9999, reloader = wks, debug = wks, quiet = not wks)
 

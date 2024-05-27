@@ -68,9 +68,12 @@ if __name__ == '__main__':
 # Imports and Python 2/3 unification ##########################################
 ###############################################################################
 
-
-import base64, cgi, email.utils, functools, hmac, imp, itertools, mimetypes,\
+# AK: imp removed from list of imports
+import base64, cgi, email.utils, functools, hmac, itertools, mimetypes,\
         os, re, tempfile, threading, time, warnings, weakref, hashlib
+
+# AK: changed imp.new_module to types.ModuleType('name')
+import types
 
 from types import FunctionType
 from datetime import date as datedate, datetime, timedelta
@@ -129,7 +132,8 @@ if py3k:
     from urllib.parse import urlencode, quote as urlquote, unquote as urlunquote
     urlunquote = functools.partial(urlunquote, encoding='latin1')
     from http.cookies import SimpleCookie, Morsel, CookieError
-    from collections import MutableMapping as DictMixin
+    #from collections import MutableMapping as DictMixin
+    from collections.abc import MutableMapping as DictMixin
     import pickle
     from io import BytesIO
     import configparser
@@ -2040,7 +2044,10 @@ class _ImportRedirect(object):
         """ Create a virtual package that redirects imports (see PEP 302). """
         self.name = name
         self.impmask = impmask
-        self.module = sys.modules.setdefault(name, imp.new_module(name))
+
+        # AK: changed imp.new_module to types.ModuleType('name')
+        #self.module = sys.modules.setdefault(name, imp.new_module(name))
+        self.module = sys.modules.setdefault(name, types.ModuleType(name))
         self.module.__dict__.update({
             '__file__': __file__,
             '__path__': [],
