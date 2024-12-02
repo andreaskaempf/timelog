@@ -7,8 +7,8 @@ time to them, and display reports, such as the total amount of time spent on
 each project.
 
 It has now been translated to Python 3, using the simple bottle.py framework
-(available and documented at bottlepy.org, but included in the repository).  To
-run it, just run timelog.py and then browse to http://localhost:8080
+(available at bottlepy.org, please install using `pip install bottle`).
+To run it, just run timelog.py and then browse to http://localhost:8080
 
 The data is stored in an SQLite database called timelog.db in the project
 directory. If the database does not exist, an empty one is automatically

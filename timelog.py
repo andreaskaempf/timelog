@@ -41,6 +41,10 @@ if not os.path.exists(session_dir):
 #--------------------------------------------------------------------#
 
 
+@route('/favicon')
+def favicon():
+    return ''
+
 # Show time log, most recent at the top
 @route('/')
 def log():
